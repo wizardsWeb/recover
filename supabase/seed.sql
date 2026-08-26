@@ -1,0 +1,8 @@
+-- Recover — seed data
+--
+-- Intentionally empty in Phase 1. Phase 2 fills this with the three merchant
+-- fixtures (Kajal & Co., Zenith Learning, Sharma Distributors), their customers,
+-- payment methods, and the bandit arm / causal DAG reference rows.
+--
+-- Run with:  supabase db reset   (local)
+--            psql "$DATABASE_URL" -f supabase/seed.sql   (cloud)

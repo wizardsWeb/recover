@@ -1,0 +1,33 @@
+# Supabase CLI configuration.
+# Phase 1 targets cloud Supabase; this file exists so `supabase start` also
+# works for future local development without reconfiguring.
+
+project_id = "recover-dev"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+# Off for local/dev so the signup -> onboarding flow is testable without a mailbox.
+enable_confirmations = false

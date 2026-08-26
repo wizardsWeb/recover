@@ -1,130 +1,289 @@
+/* General Sans — display face. Fontshare has no next/font provider, so it is
+   loaded by @import; Inter and JetBrains Mono come through next/font in
+   app/layout.tsx and arrive as --font-body / --font-mono.
+
+   This has to be the first statement in the file: @import must precede all
+   rules, and the Tailwind imports below expand inline into rules. Ordering it
+   after them makes the font request invalid CSS and browsers may drop it. */
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+/* ===========================================================================
+   The ledger palette
+   ---------------------------------------------------------------------------
+   Warm off-white paper, ink-dark text, ochre gold for the things that matter.
+   Every colour in the product resolves to one of these variables — there are no
+   hex literals outside this file and no Tailwind default palette colours
+   (blue-500 and friends) anywhere in the app.
+
+   Contrast against the surface it sits on (WCAG 2.1, light mode):
+     text-primary   #1A1814 on #FBFAF7 -> 15.9:1   AAA
+     text-secondary #5C564B on #FBFAF7 ->  6.9:1   AA
+     text-tertiary  #767061 on #FBFAF7 ->  4.7:1   AA
+     brand          #8A6614 on #FBFAF7 ->  5.0:1   AA  (safe for link text)
+     brand-line     #C9A227 is decorative only — hairlines, never text.
+   =========================================================================== */
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg-base: #fbfaf7;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #f4f2ed;
+  --bg-inset: #edeae3;
+
+  /* Rules */
+  --border-subtle: #e3dfd6;
+  --border-strong: #cfc9bc;
+
+  /* Ink */
+  --text-primary: #1a1814;
+  --text-secondary: #5c564b;
+  --text-tertiary: #767061;
+  --text-inverse: #fbfaf7;
+
+  /* Brand — rupee gold */
+  --brand: #8a6614;
+  --brand-hover: #6e5010;
+  --brand-active: #573f0c;
+  --brand-subtle: #f5edd8;
+  --brand-line: #c9a227;
+  --brand-foreground: #fbfaf7;
+
+  /* Accent — ledger ink blue */
+  --ink-blue: #1f4e79;
+  --ink-blue-hover: #163a5a;
+  --ink-blue-subtle: #e4edf5;
+
+  /* Semantic */
+  --success: #1f6f4a;
+  --success-subtle: #dff0e6;
+  --warning: #8a5d06;
+  --warning-subtle: #fbeed4;
+  --danger: #a32b22;
+  --danger-subtle: #f7e1df;
+  --info: #3f4e8c;
+  --info-subtle: #e6e9f5;
+
+  --radius: 8px;
+
+  /* --- shadcn contract -----------------------------------------------------
+     The 60 components under components/ui read these names. Pointing them at
+     ledger values is what makes every installed component inherit the palette
+     without being edited one by one. */
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-elevated);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--brand-subtle);
+  --accent-foreground: var(--brand-hover);
+  --destructive: var(--danger);
+  --border: var(--border-subtle);
+  --input: var(--border-strong);
+  --ring: var(--brand);
+  --chart-1: var(--brand);
+  --chart-2: var(--ink-blue);
+  --chart-3: var(--success);
+  --chart-4: var(--warning);
+  --chart-5: var(--info);
+  --sidebar: var(--bg-elevated);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-foreground);
+  --sidebar-accent: var(--brand-subtle);
+  --sidebar-accent-foreground: var(--brand-hover);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--brand);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  color-scheme: dark;
+
+  /* Warm charcoal, not blue-black — the paper goes dark, the ink stays warm. */
+  --bg-base: #12110f;
+  --bg-elevated: #1a1815;
+  --bg-subtle: #221f1b;
+  --bg-inset: #0c0b0a;
+
+  --border-subtle: #2e2a25;
+  --border-strong: #443e36;
+
+  --text-primary: #f2efe9;
+  --text-secondary: #a9a197;
+  --text-tertiary: #8a8175;
+  --text-inverse: #12110f;
+
+  /* Gold lifts in the dark so it stays the brightest thing on the page. */
+  --brand: #d9a93c;
+  --brand-hover: #e8bc55;
+  --brand-active: #f0cc76;
+  --brand-subtle: #2a2313;
+  --brand-line: #a8821f;
+  --brand-foreground: #12110f;
+
+  --ink-blue: #7fb2e0;
+  --ink-blue-hover: #9ac4ea;
+  --ink-blue-subtle: #16222e;
+
+  --success: #4caf7d;
+  --success-subtle: #12241b;
+  --warning: #d9a03c;
+  --warning-subtle: #2a2113;
+  --danger: #e0645a;
+  --danger-subtle: #2b1614;
+  --info: #8a97d8;
+  --info-subtle: #191c2e;
+}
+
+/* ===========================================================================
+   Tailwind token bindings
+   `inline` means the utilities emit `var(--bg-base)` rather than a resolved
+   colour, so a class written once responds to the light/dark swap above.
+   =========================================================================== */
+
+@theme inline {
+  /* Surfaces — bg-base, bg-elevated, bg-subtle, bg-inset */
+  --color-base: var(--bg-base);
+  --color-elevated: var(--bg-elevated);
+  --color-subtle: var(--bg-subtle);
+  --color-inset: var(--bg-inset);
+
+  /* Rules — border-hairline, border-edge.
+     Tailwind 4 has one colour namespace shared by bg-/text-/border-, so the
+     border scale needs names of its own; `subtle` is already a surface. */
+  --color-hairline: var(--border-subtle);
+  --color-edge: var(--border-strong);
+
+  /* Ink — text-ink, text-ink-muted, text-ink-faint, text-ink-inverse.
+     Named `ink` rather than `primary` because shadcn already owns
+     --color-primary for filled buttons. */
+  --color-ink: var(--text-primary);
+  --color-ink-muted: var(--text-secondary);
+  --color-ink-faint: var(--text-tertiary);
+  --color-ink-inverse: var(--text-inverse);
+
+  /* Brand */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-line: var(--brand-line);
+  --color-brand-foreground: var(--brand-foreground);
+
+  /* Accent */
+  --color-ink-blue: var(--ink-blue);
+  --color-ink-blue-hover: var(--ink-blue-hover);
+  --color-ink-blue-subtle: var(--ink-blue-subtle);
+
+  /* Semantic */
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+
+  /* shadcn contract */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Type */
+  --font-display: "General Sans", var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Radius — 4 / 8 / 12, nothing rounder. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
+
+  /* Shadows — warm-tinted and barely there. Depth comes from rules, not glow. */
+  --shadow-2xs: 0 1px 1px 0 rgb(26 24 20 / 0.03);
+  --shadow-xs: 0 1px 2px 0 rgb(26 24 20 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(26 24 20 / 0.05), 0 1px 3px 0 rgb(26 24 20 / 0.04);
+  --shadow-md: 0 2px 4px -1px rgb(26 24 20 / 0.06), 0 4px 8px -2px rgb(26 24 20 / 0.05);
+  --shadow-lg: 0 4px 8px -2px rgb(26 24 20 / 0.07), 0 12px 20px -4px rgb(26 24 20 / 0.06);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
-    @apply font-sans;
+    @apply font-body antialiased;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-base text-ink;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Tabular figures wherever money or counts are shown. Columns of rupees that
+     do not line up are the fastest way to look untrustworthy. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* The hairline that runs under the hero — the one place ornamental gold is
+     allowed, and it carries no information. */
+  .rule-gold {
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      var(--brand-line) 15%,
+      var(--brand-line) 85%,
+      transparent
+    );
   }
 }
