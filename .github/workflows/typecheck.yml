@@ -1,0 +1,65 @@
+name: Typecheck
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes an in-flight run on the same ref.
+concurrency:
+  group: typecheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # `next typegen` writes the route types that app code refers to through
+      # PageProps/LayoutProps, so tsc cannot run before it.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Typecheck
+        run: poetry run mypy app/
+
+      - name: Lint
+        run: poetry run ruff check app/
+
+      - name: Test
+        run: poetry run pytest
