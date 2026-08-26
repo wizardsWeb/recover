@@ -20,8 +20,8 @@ because that is what a second real failure would be. Only the customer row is
 reused.
 """
 
-from datetime import date
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 
 from app.logging import get_logger
