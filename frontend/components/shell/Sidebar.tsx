@@ -3,33 +3,35 @@
 import { PanelLeftClose, PanelLeftOpen, Terminal } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Wordmark } from "@/components/brand/Wordmark";
 import { NAV_ITEMS, isActive } from "@/components/shell/nav";
 import { cn } from "@/lib/utils/cn";
 
-const STORAGE_KEY = "recover:sidebar-collapsed";
+export const SIDEBAR_COOKIE = "recover_sidebar_collapsed";
+
+/** A year — the preference should outlive the session that set it. */
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 interface SidebarProps {
   /** Dev-only tools are hidden outside local development. */
   showDevTools: boolean;
+  /** Read from the cookie by the layout, so the server renders the right width. */
+  defaultCollapsed: boolean;
 }
 
-export function Sidebar({ showDevTools }: SidebarProps) {
+export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-
-  // Read after mount rather than during render: the server has no localStorage,
-  // and reading it in an initialiser would desync the first paint from the HTML.
-  useEffect(() => {
-    setCollapsed(window.localStorage.getItem(STORAGE_KEY) === "true");
-  }, []);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   function toggle() {
     setCollapsed((previous) => {
       const next = !previous;
-      window.localStorage.setItem(STORAGE_KEY, String(next));
+      // A cookie rather than localStorage: the server layout can read it, so
+      // the sidebar renders at the right width in the very first HTML instead
+      // of flashing open and snapping shut after hydration.
+      document.cookie = `${SIDEBAR_COOKIE}=${next}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
       return next;
     });
   }
