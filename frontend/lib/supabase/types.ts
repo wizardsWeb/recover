@@ -22,7 +22,16 @@ export type CookiesToSet = Parameters<SetAllCookies>[0];
 
 export type Vertical = "d2c_beauty" | "edtech_subscription" | "b2b_distribution" | "other";
 
-export interface MerchantRow {
+/**
+ * Declared as a `type`, not an `interface`, on purpose.
+ *
+ * postgrest-js constrains every table's `Row` to `Record<string, unknown>`.
+ * A type alias gets an implicit index signature and satisfies that; an
+ * interface does not, because declaration merging means TypeScript cannot
+ * prove the key set is closed. Get this wrong and the schema silently
+ * resolves to `never`, so every `.select()` returns `null`.
+ */
+export type MerchantRow = {
   id: string;
   name: string;
   vertical: Vertical | null;
@@ -31,9 +40,9 @@ export interface MerchantRow {
   timezone: string;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       merchants: {
@@ -48,4 +57,4 @@ export interface Database {
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };
-}
+};
