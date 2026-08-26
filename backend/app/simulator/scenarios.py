@@ -184,14 +184,9 @@ def _fire(
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S1(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S1 Suresh — subscription mandate failure. See scenarios.md §S1.
-
-    Fourth consecutive failure on the 1st, each previously recovered by hand a
-    few days later. The pattern is the signal: his salary lands after the
-    charge date, not that his instrument is broken.
-    """
-    payload = build_subscription_charged_failed_event(
+def _payload_S1() -> dict[str, Any]:
+    """The scripted S1 payload, exactly as scenarios.md shows it."""
+    return build_subscription_charged_failed_event(
         customer_external_id="cust_suresh_iyer",
         subscription_id="sub_zenith_aarav_jee",
         amount_cents=299900,
@@ -203,6 +198,16 @@ def fire_scenario_S1(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         failure_code="BAD_REQUEST_ERROR",
         attempted_at="2026-09-01T10:32:14+05:30",
     )
+
+
+def fire_scenario_S1(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S1 Suresh — subscription mandate failure. See scenarios.md §S1.
+
+    Fourth consecutive failure on the 1st, each previously recovered by hand a
+    few days later. The pattern is the signal: his salary lands after the
+    charge date, not that his instrument is broken.
+    """
+    payload = _payload_S1()
     return _fire(
         supabase_client,
         merchant_id,
@@ -222,9 +227,9 @@ def fire_scenario_S1(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S2(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S2 Priya — cart abandoned at method selection. See scenarios.md §S2."""
-    payload = build_checkout_abandoned_event(
+def _payload_S2() -> dict[str, Any]:
+    """The scripted S2 payload, exactly as scenarios.md shows it."""
+    return build_checkout_abandoned_event(
         customer_external_id="cust_priya_menon",
         cart_value_cents=124000,
         items=[
@@ -243,6 +248,11 @@ def fire_scenario_S2(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         cart_id="cart_20260903_priya",
         abandoned_at="2026-09-03T20:14:33+05:30",
     )
+
+
+def fire_scenario_S2(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S2 Priya — cart abandoned at method selection. See scenarios.md §S2."""
+    payload = _payload_S2()
     return _fire(
         supabase_client,
         merchant_id,
@@ -262,13 +272,9 @@ def fire_scenario_S2(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S3(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S3 Aditya — card auth failure at 11:34pm Saturday. See scenarios.md §S3.
-
-    The timestamp is the scenario. HDFC credit cards degrade every weekend
-    night; the right move is to say nothing and retry Monday morning.
-    """
-    payload = build_payment_failed_event(
+def _payload_S3() -> dict[str, Any]:
+    """The scripted S3 payload, exactly as scenarios.md shows it."""
+    return build_payment_failed_event(
         customer_external_id="cust_aditya_rao",
         amount_cents=84000,
         method="card",
@@ -279,6 +285,15 @@ def fire_scenario_S3(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         order_id="order_20260906_aditya",
         attempted_at="2026-09-06T23:34:12+05:30",
     )
+
+
+def fire_scenario_S3(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S3 Aditya — card auth failure at 11:34pm Saturday. See scenarios.md §S3.
+
+    The timestamp is the scenario. HDFC credit cards degrade every weekend
+    night; the right move is to say nothing and retry Monday morning.
+    """
+    payload = _payload_S3()
     return _fire(
         supabase_client,
         merchant_id,
@@ -298,13 +313,9 @@ def fire_scenario_S3(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S4(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S4 Meera — invoice 12 days overdue. See scenarios.md §S4.
-
-    A chronic-late payer who has never missed one in eight years. The value on
-    offer is days pulled forward, not a recovery that would otherwise be lost.
-    """
-    payload = build_invoice_overdue_event(
+def _payload_S4() -> dict[str, Any]:
+    """The scripted S4 payload, exactly as scenarios.md shows it."""
+    return build_invoice_overdue_event(
         customer_external_id="cust_meera_rasoi_chain",
         invoice_id="INV-2026-08847",
         amount_cents=14500000,
@@ -313,6 +324,15 @@ def fire_scenario_S4(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         invoice_description="60 crates cooking oil (Fortune sunflower)",
         merchant_ref=fixtures.MERCHANT_SHARMA,
     )
+
+
+def fire_scenario_S4(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S4 Meera — invoice 12 days overdue. See scenarios.md §S4.
+
+    A chronic-late payer who has never missed one in eight years. The value on
+    offer is days pulled forward, not a recovery that would otherwise be lost.
+    """
+    payload = _payload_S4()
     return _fire(
         supabase_client,
         merchant_id,
@@ -332,13 +352,9 @@ def fire_scenario_S4(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S5(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S5 Vikram — mandate revoked, first failure in 18 months. See §S5.
-
-    Fire this, then inject "bhaisaab beta ab coaching nahi le raha, cancel kar
-    do please" from the reply injector to reach the handoff beat.
-    """
-    payload = build_subscription_charged_failed_event(
+def _payload_S5() -> dict[str, Any]:
+    """The scripted S5 payload, exactly as scenarios.md shows it."""
+    return build_subscription_charged_failed_event(
         customer_external_id="cust_vikram_sethi",
         subscription_id="sub_zenith_vikram_class9",
         amount_cents=199900,
@@ -349,6 +365,15 @@ def fire_scenario_S5(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         merchant_ref=fixtures.MERCHANT_ZENITH,
         attempted_at="2026-09-04T08:15:00+05:30",
     )
+
+
+def fire_scenario_S5(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S5 Vikram — mandate revoked, first failure in 18 months. See §S5.
+
+    Fire this, then inject "bhaisaab beta ab coaching nahi le raha, cancel kar
+    do please" from the reply injector to reach the handoff beat.
+    """
+    payload = _payload_S5()
     return _fire(
         supabase_client,
         merchant_id,
@@ -368,12 +393,9 @@ def fire_scenario_S5(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
-def fire_scenario_S6(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """S6 Sana — UPI PSP timeout on a first order. See scenarios.md §S6.
-
-    Fire this, then inject "STOP" to exercise the hard compliance path.
-    """
-    payload = build_payment_failed_event(
+def _payload_S6() -> dict[str, Any]:
+    """The scripted S6 payload, exactly as scenarios.md shows it."""
+    return build_payment_failed_event(
         customer_external_id="cust_sana_khatri",
         amount_cents=68000,
         method="upi",
@@ -383,6 +405,14 @@ def fire_scenario_S6(supabase_client: Any, merchant_id: str, trace_id: str) -> d
         order_id="order_20260905_sana",
         attempted_at="2026-09-05T14:22:00+05:30",
     )
+
+
+def fire_scenario_S6(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
+    """S6 Sana — UPI PSP timeout on a first order. See scenarios.md §S6.
+
+    Fire this, then inject "STOP" to exercise the hard compliance path.
+    """
+    payload = _payload_S6()
     return _fire(
         supabase_client,
         merchant_id,
@@ -402,6 +432,22 @@ def fire_scenario_S6(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 # ---------------------------------------------------------------------------
 
 
+def _payload_B3(index: int) -> dict[str, Any]:
+    """One failure from the SBI UPI burst, spread across the 90-second window."""
+    synthetic = fixtures.B3_SYNTHETIC_CUSTOMERS[index]
+    return build_payment_failed_event(
+        customer_external_id=synthetic["external_id"],
+        amount_cents=synthetic["amount_cents"],
+        method="upi",
+        failure_code="GATEWAY_ERROR",
+        failure_reason="upi_psp_unavailable",
+        bank="SBI",
+        merchant_ref=fixtures.MERCHANT_KAJAL,
+        order_id=f"order_20260910_b3_{index + 1:02d}",
+        attempted_at=f"2026-09-10T14:3{index // 6}:{(index * 11) % 60:02d}+05:30",
+    )
+
+
 def fire_scenario_B3(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
     """B3 — inject SBI UPI failure events across 8 synthetic customers.
 
@@ -413,18 +459,7 @@ def fire_scenario_B3(supabase_client: Any, merchant_id: str, trace_id: str) -> d
     event_ids: list[str] = []
 
     for index, synthetic in enumerate(fixtures.B3_SYNTHETIC_CUSTOMERS):
-        payload = build_payment_failed_event(
-            customer_external_id=synthetic["external_id"],
-            amount_cents=synthetic["amount_cents"],
-            method="upi",
-            failure_code="GATEWAY_ERROR",
-            failure_reason="upi_psp_unavailable",
-            bank="SBI",
-            merchant_ref=fixtures.MERCHANT_KAJAL,
-            order_id=f"order_20260910_b3_{index + 1:02d}",
-            # Spread across the 90-second window the alert is computed over.
-            attempted_at=f"2026-09-10T14:3{index // 6}:{(index * 11) % 60:02d}+05:30",
-        )
+        payload = _payload_B3(index)
         customer = get_or_create_customer(supabase_client, merchant_id, synthetic)
         event = _insert_event(
             supabase_client, merchant_id, customer["id"], "payment.failed", payload
@@ -591,7 +626,7 @@ SCENARIO_METADATA: dict[str, dict[str, Any]] = {
         "amount_at_risk_inr": 680,
         "amount_at_risk_cents": 68000,
         "event_type": "payment.failed",
-        "one_line_description": "First-order UPI timeout — STOP reply triggers hard compliance halt",
+        "one_line_description": "First-order UPI timeout — STOP reply forces a compliance halt",
         "video_expected_path": "whatsapp_payment_link, then consent revoked (Phase 6)",
         "deferred": False,
     },
@@ -630,8 +665,30 @@ SCENARIO_METADATA: dict[str, dict[str, Any]] = {
         "amount_at_risk_inr": None,
         "amount_at_risk_cents": sum(c["amount_cents"] for c in fixtures.B3_SYNTHETIC_CUSTOMERS),
         "event_type": "payment.failed",
-        "one_line_description": "SBI UPI outage — 8 failures in 90 seconds trip the network detector",
+        "one_line_description": "SBI UPI outage — 8 failures in 90s trip the network detector",
         "video_expected_path": "Platform-wide retry pause (Phase 10)",
         "deferred": False,
     },
 }
+
+
+def sample_payloads() -> dict[str, dict[str, Any] | None]:
+    """The payload each scenario would write, without writing anything.
+
+    Built by calling the same functions the firings call, so the preview in the
+    control panel cannot drift from what actually lands in the events table.
+    B1 and B2 have no payload because they have no event.
+    """
+    return {
+        "S1": _payload_S1(),
+        "S2": _payload_S2(),
+        "S3": _payload_S3(),
+        "S4": _payload_S4(),
+        "S5": _payload_S5(),
+        "S6": _payload_S6(),
+        "B1": None,
+        "B2": None,
+        # Representative of the burst — the other seven differ only in
+        # customer, amount, order id, and second-of-minute.
+        "B3": _payload_B3(0),
+    }

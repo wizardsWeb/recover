@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from app.api import health, merchants
+from app.api import health, merchants, simulator
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
 
@@ -101,3 +101,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(health.router)
 app.include_router(merchants.router)
+# The simulator router refuses to serve outside a development environment;
+# see the dependency on `require_dev_environment`.
+app.include_router(simulator.router)

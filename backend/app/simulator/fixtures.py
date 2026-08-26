@@ -462,5 +462,7 @@ B3_SYNTHETIC_CUSTOMERS: list[dict[str, Any]] = [
         },
         "amount_cents": amount,
     }
-    for index, (name, bank, amount) in enumerate(zip(_B3_NAMES, _B3_BANKS, _B3_AMOUNTS, strict=True))
+    for index, (name, bank, amount) in enumerate(
+        zip(_B3_NAMES, _B3_BANKS, _B3_AMOUNTS, strict=True)
+    )
 ]
