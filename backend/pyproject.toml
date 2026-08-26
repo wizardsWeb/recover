@@ -34,6 +34,13 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# Scenario functions are named for their code in scenarios.md — fire_scenario_S1,
+# not fire_scenario_s1 — so a reader can grep either file with the same string.
+# The uppercase suffix is the point; N802 would cost more than it buys here.
+"app/simulator/scenarios.py" = ["N802"]
+"tests/simulator/test_scenarios.py" = ["N802"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

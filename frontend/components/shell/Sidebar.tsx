@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeftClose, PanelLeftOpen, Terminal } from "lucide-react";
+import { FlaskConical, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -87,14 +87,14 @@ export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
             </p>
           )}
           <Link
-            href="/dev/simulator"
+            href="/app/dev/simulator"
             title={collapsed ? "Simulator" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-subtle hover:text-ink",
               collapsed && "justify-center px-0",
             )}
           >
-            <Terminal className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+            <FlaskConical className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
             {!collapsed && <span>Simulator</span>}
           </Link>
         </div>
