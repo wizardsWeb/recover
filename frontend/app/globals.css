@@ -1,10 +1,14 @@
+/* General Sans — display face. Fontshare has no next/font provider, so it is
+   loaded by @import; Inter and JetBrains Mono come through next/font in
+   app/layout.tsx and arrive as --font-body / --font-mono.
+
+   This has to be the first statement in the file: @import must precede all
+   rules, and the Tailwind imports below expand inline into rules. Ordering it
+   after them makes the font request invalid CSS and browsers may drop it. */
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* General Sans — display face. Fontshare has no next/font provider, so it is
-   loaded by @import; Inter and JetBrains Mono come through next/font in
-   app/layout.tsx and arrive as --font-body / --font-mono. */
-@import url("https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
