@@ -33,7 +33,12 @@ export interface MerchantOnboard {
   vertical: Vertical;
 }
 
-/** An error carrying the backend's status code, so callers can branch on it. */
+/**
+ * An error carrying the backend's status code, so callers can branch on it.
+ *
+ * The simulator client leans on this: a 424 means "load fixtures first" and
+ * gets a different toast from a genuine failure.
+ */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -49,7 +54,7 @@ interface ErrorEnvelope {
   error?: { message?: string };
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const supabase = createClient();
   const {
     data: { session },

@@ -114,6 +114,7 @@ Two things are worth knowing about this shape:
 │   │   ├── (marketing)/         landing page — owns /
 │   │   ├── (auth)/              login, signup, onboarding
 │   │   └── app/                 the guarded dashboard at /app/*
+│   │       └── dev/simulator/   scenario control panel (development only)
 │   ├── components/
 │   │   ├── shell/               sidebar, header, page chrome
 │   │   ├── ui/                  shadcn components (CLI-managed)
@@ -125,14 +126,17 @@ Two things are worth knowing about this shape:
 │
 ├── backend/                     FastAPI, Python 3.11
 │   ├── app/
-│   │   ├── api/                 health, merchants
+│   │   ├── api/                 health, merchants, simulator
+│   │   ├── simulator/           persona fixtures, event + reply generators,
+│   │   │                        the nine scripted scenarios
 │   │   ├── auth.py              Supabase JWT verification
 │   │   └── deps.py              request-scoped user + Supabase client
 │   └── tests/
 │
 ├── supabase/
 │   ├── migrations/              the frozen schema — later phases are additive
-│   └── seed.sql                 fixtures land here in Phase 2
+│   └── seed.sql                 unused: fixtures are per-merchant, so the
+│                                simulator creates them at runtime
 │
 ├── docker-compose.yml           production-shaped stack
 └── docker-compose.override.yml  backend hot reload, loaded automatically
@@ -150,6 +154,31 @@ Both run in CI on every pull request — see `.github/workflows/typecheck.yml`.
 The database has its own check. `supabase/tests/rls_isolation.sql` applies the
 migration to a throwaway Postgres and asserts that one merchant cannot read or
 write another merchant's rows — see [`supabase/tests/README.md`](./supabase/tests/README.md).
+
+## Simulator
+
+There is no Razorpay webhook feed in development, so the simulator manufactures
+one. Sign in, then open **Simulator** in the sidebar (`/app/dev/simulator`):
+
+1. **Load demo fixtures** — creates the six persona customers from
+   [`scenarios.md`](./scenarios.md), their payment methods, and the eight-customer
+   cohort the SBI downtime beat needs. Idempotent; run it as often as you like.
+2. **Fire a scenario** — S1–S6 each write one event and open one recovery case.
+   B3 writes eight. B1 and B2 are batch beats that land in Phase 11 and write
+   nothing until then.
+3. **Inject a reply** — puts a customer reply on an open case. Classification
+   arrives in Phase 5; for now the row is stored raw.
+4. **Reset all data** — deletes everything the simulator created for your
+   merchant. Customers you added yourself are left alone.
+
+Two things worth knowing:
+
+- The endpoints **404 outside a development environment**, whatever the frontend
+  does. An enabled simulator in production would let anyone write fabricated
+  cases into a live merchant's ledger.
+- Every payload matches `scenarios.md` exactly, and
+  `tests/simulator/test_payload_fidelity.py` reads that document to prove it. If
+  the script changes and the generator does not, the build fails.
 
 ## Phases
 
