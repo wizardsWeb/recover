@@ -147,6 +147,10 @@ cd backend  && poetry run pytest && poetry run mypy app/ && poetry run ruff chec
 
 Both run in CI on every pull request — see `.github/workflows/typecheck.yml`.
 
+The database has its own check. `supabase/tests/rls_isolation.sql` applies the
+migration to a throwaway Postgres and asserts that one merchant cannot read or
+write another merchant's rows — see [`supabase/tests/README.md`](./supabase/tests/README.md).
+
 ## Phases
 
 The full plan, phase by phase, is in [`phase-plan.md`](./phase-plan.md).
