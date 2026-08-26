@@ -1,0 +1,46 @@
+# Production-shaped stack: both apps run from their built images.
+# docker-compose.override.yml is loaded automatically on top of this and turns
+# the backend into a hot-reloading dev server.
+#
+# Values below come from the root .env file — copy .env.example to .env first.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    restart: unless-stopped
+    healthcheck:
+      # python rather than curl: the slim image has no curl, and adding one
+      # just for a healthcheck is a package more than this needs.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build args, not runtime env: Next inlines NEXT_PUBLIC_* into the
+        # browser bundle when it builds. Setting them at runtime is too late.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set NEXT_PUBLIC_SUPABASE_URL in the root .env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set NEXT_PUBLIC_SUPABASE_ANON_KEY in the root .env}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_ENVIRONMENT: ${NEXT_PUBLIC_ENVIRONMENT:-local}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
