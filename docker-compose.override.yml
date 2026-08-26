@@ -1,0 +1,13 @@
+# Loaded automatically by `docker compose up`. Keeps the backend hot-reloading
+# against your working tree so a Python edit does not need an image rebuild.
+#
+# The frontend is not overridden here: Next's dev server wants the full source
+# tree and node_modules bind-mounted, which is markedly slower than just
+# running `npm run dev` in ./frontend. Do that while working on the UI.
+
+services:
+  backend:
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend/app:/app/app:ro
