@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "recover-backend"
+version = "0.1.0"
+description = "Recover — AI revenue recovery agent, backend API"
+authors = ["Recover Team"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = ">=0.115"
+uvicorn = { extras = ["standard"], version = ">=0.30" }
+pydantic = ">=2.9"
+pydantic-settings = ">=2.5"
+supabase = ">=2.9"
+httpx = ">=0.27"
+python-jose = { extras = ["cryptography"], version = ">=3.3" }
+structlog = ">=24.4"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.3"
+pytest-asyncio = ">=0.24"
+ruff = ">=0.6"
+mypy = ">=1.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# The Supabase and jose clients ship without complete stubs.
+ignore_missing_imports = true
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
