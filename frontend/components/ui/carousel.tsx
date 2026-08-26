@@ -95,6 +95,10 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return
+    // Embla does not emit "select" on init, so the initial state has to be
+    // pulled once by hand. Reading an external library's starting state is
+    // the legitimate case the rule below cannot distinguish.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api)
     api.on("reInit", onSelect)
     api.on("select", onSelect)

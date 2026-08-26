@@ -2,9 +2,9 @@
 
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 const ORDER = ["light", "dark", "system"] as const;
 type Theme = (typeof ORDER)[number];
@@ -25,8 +25,7 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   // The server has no idea which theme the browser will resolve to, so the icon
   // is held back until after hydration rather than flashing the wrong one.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const current: Theme = mounted && ORDER.includes(theme as Theme) ? (theme as Theme) : "system";
   const Icon = ICONS[current];

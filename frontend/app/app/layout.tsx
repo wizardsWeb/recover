@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/shell/AppShell";
+import { SIDEBAR_COOKIE } from "@/components/shell/Sidebar";
 import { isLocal } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,11 +29,17 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
 
   if (!merchant?.onboarded) redirect("/onboarding");
 
+  // Reading the collapse preference here is what lets the first HTML come back
+  // at the right width, instead of flashing open and snapping shut.
+  const cookieStore = await cookies();
+  const defaultSidebarCollapsed = cookieStore.get(SIDEBAR_COOKIE)?.value === "true";
+
   return (
     <AppShell
       email={user.email ?? ""}
       businessName={merchant.name}
       showDevTools={isLocal}
+      defaultSidebarCollapsed={defaultSidebarCollapsed}
     >
       {children}
     </AppShell>

@@ -9,6 +9,7 @@ interface AppShellProps {
   email: string;
   businessName: string;
   showDevTools: boolean;
+  defaultSidebarCollapsed: boolean;
 }
 
 /**
@@ -19,10 +20,16 @@ interface AppShellProps {
  * the collapsed/expanded sidebar width is the only thing the layout has to
  * respond to.
  */
-export function AppShell({ children, email, businessName, showDevTools }: AppShellProps) {
+export function AppShell({
+  children,
+  email,
+  businessName,
+  showDevTools,
+  defaultSidebarCollapsed,
+}: AppShellProps) {
   return (
     <div className="flex h-dvh overflow-hidden bg-base">
-      <Sidebar showDevTools={showDevTools} />
+      <Sidebar showDevTools={showDevTools} defaultCollapsed={defaultSidebarCollapsed} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header email={email} businessName={businessName} />
         <main className="flex-1 overflow-y-auto">
