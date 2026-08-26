@@ -39,6 +39,7 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 # not fire_scenario_s1 — so a reader can grep either file with the same string.
 # The uppercase suffix is the point; N802 would cost more than it buys here.
 "app/simulator/scenarios.py" = ["N802"]
+"tests/simulator/test_scenarios.py" = ["N802"]
 
 [tool.mypy]
 python_version = "3.11"
