@@ -22,8 +22,17 @@ export const env = {
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   ),
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? "local",
 } as const;
 
 /** True in local development, where the Simulator and dev hints are shown. */
 export const isLocal = env.environment === "local";
+
+/**
+ * True only for the deployed production build.
+ *
+ * Not the inverse of `isLocal`: `local-prod` (docker-compose.prod.yml) and
+ * `staging` are neither, and should not be labelled production in the UI.
+ */
+export const isProduction = env.environment === "production";
