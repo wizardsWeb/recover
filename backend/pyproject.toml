@@ -42,6 +42,9 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 # The uppercase suffix is the point; N802 would cost more than it buys here.
 "app/simulator/scenarios.py" = ["N802"]
 "tests/simulator/test_scenarios.py" = ["N802"]
+# Same reason as above, for the filename: `test_S6_sana.py` is greppable against
+# scenarios.md and `fire_scenario_S6`; `test_s6_sana.py` is not.
+"tests/scenarios/test_S6_sana.py" = ["N999"]
 
 [tool.mypy]
 python_version = "3.11"
