@@ -19,11 +19,13 @@ and keeps snake_case in Python, so the frontend's types read the same as
 from typing import Annotated, Any, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from app.agent.core import process_event
 from app.config import get_settings
+from app.db import get_service_client
 from app.deps import CurrentUserId, UserSupabase
 from app.logging import get_logger
 from app.simulator import loader, reply_generator
@@ -285,10 +287,17 @@ def fixture_status(user_id: CurrentUserId, supabase: UserSupabase) -> FixtureSta
 def fire_scenario(
     code: str,
     response: Response,
+    background_tasks: BackgroundTasks,
     user_id: CurrentUserId,
     supabase: UserSupabase,
 ) -> FireScenarioResponse:
-    """Fire one scenario: write its event, open its case, audit the firing."""
+    """Fire one scenario: write its event, open its case, run the agent on it.
+
+    The agent runs as a background task on the service-role client, exactly as
+    it does for a real webhook — the point of the simulator is that the path
+    from event to recovery is the same one production uses. See
+    ``app.api.events`` for why the request-scoped client cannot be used.
+    """
     normalised = code.strip().upper()
     if normalised not in SCENARIO_REGISTRY:
         raise HTTPException(
@@ -313,7 +322,29 @@ def fire_scenario(
         )
 
     result = SCENARIO_REGISTRY[normalised](supabase, user_id, _trace_id())
+    _queue_agent_runs(background_tasks, result, user_id)
     return FireScenarioResponse.model_validate(result)
+
+
+def _queue_agent_runs(
+    background_tasks: BackgroundTasks,
+    result: dict[str, Any],
+    user_id: str,
+) -> None:
+    """Hand every event a scenario produced to the agent loop.
+
+    Scenarios fire one event each except the network-effect ones, which fire a
+    batch; both shapes are handled so a multi-merchant scenario does not
+    silently process only its first event.
+    """
+    event_ids = [eid for eid in (result.get("event_ids") or []) if eid]
+    if not event_ids and result.get("event_id"):
+        event_ids = [str(result["event_id"])]
+    if not event_ids:
+        return
+    service_client = get_service_client()
+    for event_id in event_ids:
+        background_tasks.add_task(process_event, str(event_id), user_id, service_client)
 
 
 # ---------------------------------------------------------------------------

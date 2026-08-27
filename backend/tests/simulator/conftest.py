@@ -32,9 +32,21 @@ def db() -> FakeSupabase:
 
 
 @pytest.fixture
-def client(db: FakeSupabase) -> Iterator[TestClient]:
+def client(db: FakeSupabase, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     app.dependency_overrides[get_current_user_id] = lambda: MERCHANT_ID
     app.dependency_overrides[get_user_supabase] = lambda: db
+
+    # Firing a scenario queues the agent loop on the service-role client, which
+    # `get_service_client` would otherwise build against the real Supabase URL.
+    # These tests are about what the *simulator* writes, so the background task
+    # is pointed at an empty database: it finds no event and returns without
+    # touching `db`. The agent's own behaviour is covered in tests/agent and
+    # tests/scenarios, where the clock is pinned — running it here would make
+    # every simulator assertion depend on what time of day the suite ran.
+    empty = FakeSupabase()
+    monkeypatch.setattr("app.api.simulator.get_service_client", lambda: empty)
+    monkeypatch.setattr("app.api.events.get_service_client", lambda: empty)
+
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

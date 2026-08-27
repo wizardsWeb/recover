@@ -50,7 +50,39 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "is_holdout": False,
         "trigger_event_id": None,
     },
-    "customer_replies": {"customer_id": None, "llm_classification": None},
+    "customer_replies": {
+        "customer_id": None,
+        "llm_classification": None,
+        "applied_state_update": None,
+    },
+    "agent_decisions": {
+        "decision_source": None,
+        "bandit_chosen_arm": None,
+        "bandit_arm_confidence": None,
+        "bandit_mode": None,
+        "bandit_alternatives": None,
+        "causal_path": None,
+        "diagnosis_posteriors": None,
+        "chosen_action": None,
+        "action_params": None,
+        "reasoning": None,
+        "uplift_estimate": None,
+        "guardrail_checks": None,
+    },
+    "execution_attempts": {
+        "decision_id": None,
+        "request_payload": None,
+        "response_payload": None,
+        "status": "pending",
+        "idempotency_key": None,
+        "completed_at": None,
+    },
+    "network_alerts": {
+        "affected_bank": None,
+        "affected_method": None,
+        "resolved_at": None,
+        "metadata": None,
+    },
     "audit_events": {"case_id": None, "details": None, "trace_id": None},
 }
 
@@ -59,12 +91,17 @@ _TIMESTAMP_COLUMNS: dict[str, str] = {
     "events": "received_at",
     "recovery_cases": "opened_at",
     "customer_replies": "received_at",
+    "execution_attempts": "attempted_at",
 }
 
 
 class _Result:
-    def __init__(self, data: list[dict[str, Any]]) -> None:
+    def __init__(self, data: list[dict[str, Any]], count: int | None = None) -> None:
         self.data = data
+        # PostgREST only populates `count` when the caller asked for it, and the
+        # guardrail reads `resp.count or 0` — so leaving it None when unasked is
+        # what keeps that idiom under test.
+        self.count = count
 
 
 def _json_text(value: Any) -> str:
@@ -93,14 +130,18 @@ class _Query:
         self._limit: int | None = None
         self._order: tuple[str, bool] | None = None
         self._embed: str | None = None
+        self._count: str | None = None
+        self._range: tuple[int, int] | None = None
 
     # -- operations ---------------------------------------------------------
 
-    def select(self, columns: str = "*", **_: Any) -> _Query:
+    def select(self, *columns: str, **kwargs: Any) -> _Query:
         self._op = "select"
+        self._count = kwargs.get("count")
         # `customers(name)` asks PostgREST to embed the related row.
-        if "(" in columns:
-            self._embed = columns[: columns.index("(")].rsplit(",", 1)[-1].strip()
+        for column in columns:
+            if "(" in column:
+                self._embed = column[: column.index("(")].rsplit(",", 1)[-1].strip()
         return self
 
     def insert(self, payload: Any, **_: Any) -> _Query:
@@ -127,12 +168,33 @@ class _Query:
         self._filters.append(("in", column, list(values)))
         return self
 
+    def neq(self, column: str, value: Any) -> _Query:
+        self._filters.append(("neq", column, value))
+        return self
+
+    def gte(self, column: str, value: Any) -> _Query:
+        self._filters.append(("gte", column, value))
+        return self
+
+    def lt(self, column: str, value: Any) -> _Query:
+        self._filters.append(("lt", column, value))
+        return self
+
     def is_(self, column: str, value: Any) -> _Query:
         self._filters.append(("is", column, value))
         return self
 
+    def like(self, column: str, pattern: str) -> _Query:
+        self._filters.append(("like", column, pattern))
+        return self
+
     def limit(self, count: int) -> _Query:
         self._limit = count
+        return self
+
+    def range(self, start: int, end: int) -> _Query:
+        # PostgREST's range is inclusive at both ends, like an HTTP Range header.
+        self._range = (start, end)
         return self
 
     def order(self, column: str, desc: bool = False, **_: Any) -> _Query:
@@ -156,6 +218,24 @@ class _Query:
                     if actual != _json_text(value):
                         return False
                 elif actual != value:
+                    return False
+            elif kind == "like":
+                # Only the trailing-% form the audit filter uses is supported;
+                # anything else would be a fake that lies about its coverage.
+                prefix = str(value).rstrip("%")
+                if actual is None or not str(actual).startswith(prefix):
+                    return False
+            elif kind == "neq":
+                if actual == value:
+                    return False
+            elif kind == "gte":
+                # Timestamps are compared as ISO strings, which sort correctly
+                # only because every value the fake stores is UTC with the same
+                # precision — the same assumption PostgREST's index relies on.
+                if actual is None or str(actual) < str(value):
+                    return False
+            elif kind == "lt":
+                if actual is None or str(actual) >= str(value):
                     return False
             elif kind == "in":
                 if actual not in value:
@@ -191,13 +271,17 @@ class _Query:
             matched = sorted(matched, key=lambda row: str(row.get(column) or ""), reverse=desc)
         if self._limit is not None:
             matched = matched[: self._limit]
+        if self._range is not None:
+            start, end = self._range
+            matched = matched[start : end + 1]
 
+        total = len(matched) if self._count else None
         result = [dict(row) for row in matched]
         if self._embed:
             for row in result:
                 related = self._db.find_one(self._embed, row.get(f"{self._embed[:-1]}_id"))
                 row[self._embed] = {"name": related.get("name")} if related else None
-        return _Result(result)
+        return _Result(result, total)
 
 
 class FakeSupabase:
