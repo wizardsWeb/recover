@@ -2,8 +2,8 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "supabaseUrl": { "value": "https://REPLACE-ME.supabase.co" },
-    "supabaseAnonKey": { "value": "REPLACE-ME" },
+    "supabaseUrl": { "value": "https://olbvihdmnnedigqolrhr.supabase.co" },
+    "supabaseAnonKey": { "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sYnZpaGRtbm5lZGlncW9scmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NDUyMjMsImV4cCI6MjEwMzMyMTIyM30.up3t1t-KS2yPZXF3GBWiwPNnz9buAQBd5NY_fYLorNU" },
     "environment": { "value": "prod" }
   }
 }
