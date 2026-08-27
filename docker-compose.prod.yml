@@ -1,0 +1,76 @@
+# The production images, run locally. Same Dockerfiles, same build args, and the
+# same ENVIRONMENT shape the Container Apps get — so a problem that only appears
+# in a production build shows up here instead of in a deployment.
+#
+# Standalone by design: run it with -f, and docker-compose.override.yml (which
+# turns the backend into a hot-reloading dev server) is not applied.
+#
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# Needs a root .env for the NEXT_PUBLIC_* build args — copy .env.example to .env.
+# Backend secrets are read from backend/.env, the same file `docker compose up`
+# already uses, so nothing has to be kept in two places.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - backend/.env
+    # `environment` wins over `env_file`, so these pin the production shape
+    # whatever backend/.env happens to say.
+    environment:
+      ENVIRONMENT: local-prod
+      LOG_LEVEL: INFO
+      ALLOWED_ORIGINS: http://localhost:3000
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      # python rather than curl: the slim image has no curl, and adding one just
+      # for a healthcheck is a package more than this needs.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build args, not runtime env: Next inlines NEXT_PUBLIC_* into the
+        # browser bundle when it builds. Setting them at runtime is too late.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set NEXT_PUBLIC_SUPABASE_URL in the root .env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set NEXT_PUBLIC_SUPABASE_ANON_KEY in the root .env}
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+        NEXT_PUBLIC_ENVIRONMENT: local-prod
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
