@@ -6,7 +6,8 @@ import { CaseTimeline } from "@/components/domain/CaseTimeline";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCase, type CaseDetail } from "@/lib/api/cases";
+import type { CaseDetail } from "@/lib/api/cases";
+import { getCase } from "@/lib/api/cases.server";
 import { formatINR, formatRelativeTime } from "@/lib/utils/format";
 import { CaseActions } from "./CaseActions";
 

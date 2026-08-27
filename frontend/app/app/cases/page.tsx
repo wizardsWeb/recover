@@ -13,7 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getCases, type CaseListItem } from "@/lib/api/cases";
+import type { CaseListItem } from "@/lib/api/cases";
+import { getCases } from "@/lib/api/cases.server";
 import { formatINR, formatRelativeTime } from "@/lib/utils/format";
 
 export const metadata: Metadata = { title: "Cases" };
