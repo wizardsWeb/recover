@@ -144,6 +144,7 @@ async def run_agent_loop(
 
     # Fetch supporting data once — reused across steps.
     customer = await _fetch_customer(case.get("customer_id"), supabase_client)
+    merchant = await _fetch_merchant(merchant_id, supabase_client)
     pending_reply = await _fetch_pending_reply(case_id, supabase_client)
     case = _enrich_case(case, event, customer)
 
@@ -296,7 +297,17 @@ async def run_agent_loop(
         # ── STEP 6: EXECUTE ────────────────────────────────────────────
         # FUTURE PHASE swaps the simulated adapters for real API calls; the
         # idempotency key and the attempt row stay exactly as they are.
-        execution = await run_execute(case, decision_dict, supabase_client, trace_id)
+        # The customer and merchant rows go in for message generation: the copy
+        # is written against the merchant's vertical and the customer's language,
+        # tenure and LTV band, none of which are on the case row.
+        execution = await run_execute(
+            case,
+            decision_dict,
+            supabase_client,
+            trace_id,
+            customer=customer,
+            merchant=merchant,
+        )
         steps_completed.append(StepName.EXECUTE)
         await audit.log_execution(
             supabase_client, case_id, merchant_id, execution.model_dump(), trace_id
@@ -451,18 +462,24 @@ async def _run_listen_stage(
                 log.info("consent_revoked", customer_id=customer["id"])
             except Exception as exc:  # noqa: BLE001
                 log.warning("consent_revoke_error", error=str(exc))
-        return listen, CaseStatus.STOPPED, (
-            "Customer opted out — consent revoked across all channels"
+        return (
+            listen,
+            CaseStatus.STOPPED,
+            ("Customer opted out — consent revoked across all channels"),
         )
 
     if listen.hardship_signal:
-        return listen, CaseStatus.STOPPED, (
-            "Customer signalled hardship — recovery paused, human handoff triggered"
+        return (
+            listen,
+            CaseStatus.STOPPED,
+            ("Customer signalled hardship — recovery paused, human handoff triggered"),
         )
 
     if listen.churn_signal:
-        return listen, CaseStatus.STOPPED, (
-            "Customer confirmed churn — recovery stopped, handoff to retention team"
+        return (
+            listen,
+            CaseStatus.STOPPED,
+            ("Customer confirmed churn — recovery stopped, handoff to retention team"),
         )
 
     return listen, CaseStatus.IN_FLIGHT, None
@@ -501,7 +518,6 @@ async def _hear_pending_reply(
     return listen, close_reason or fallback_reason
 
 
-
 async def _get_or_create_case(
     event: dict[str, Any],
     playbook: str,
@@ -518,9 +534,7 @@ async def _get_or_create_case(
     """
     customer_id = await _resolve_customer_id(event, merchant_id, supabase_client)
     if not customer_id:
-        logger.warning(
-            "customer_not_found_for_event", event_id=event.get("id"), trace_id=trace_id
-        )
+        logger.warning("customer_not_found_for_event", event_id=event.get("id"), trace_id=trace_id)
         return None
 
     try:
@@ -610,6 +624,20 @@ async def _fetch_customer(customer_id: Any, supabase_client: Any) -> dict[str, A
         return None
 
 
+async def _fetch_merchant(merchant_id: str, supabase_client: Any) -> dict[str, Any] | None:
+    """Load the merchant row, which carries the name and vertical the copy needs.
+
+    Tolerates a miss: message generation degrades to a generic merchant name,
+    and failing the pass over a missing display name would trade a recovery for
+    a cosmetic detail.
+    """
+    try:
+        resp = supabase_client.table("merchants").select("*").eq("id", merchant_id).execute()
+        return dict(resp.data[0]) if resp.data else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _fetch_pending_reply(case_id: str, supabase_client: Any) -> dict[str, Any] | None:
     """Return the newest reply on this case that no pass has acted on yet.
 
@@ -672,9 +700,9 @@ def _mark_event_processed(supabase_client: Any, event: dict[str, Any]) -> None:
     if event.get("processed_at"):
         return
     try:
-        supabase_client.table("events").update(
-            {"processed_at": datetime.now(UTC).isoformat()}
-        ).eq("id", event["id"]).execute()
+        supabase_client.table("events").update({"processed_at": datetime.now(UTC).isoformat()}).eq(
+            "id", event["id"]
+        ).execute()
     except Exception as exc:  # noqa: BLE001
         logger.warning("event_processed_update_error", error=str(exc))
 
