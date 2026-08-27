@@ -23,6 +23,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.agent.core import process_event
+from app.agent.models import StepName
 from app.deps import get_current_user_id, get_user_supabase
 from app.main import app
 from tests.simulator.conftest import MERCHANT_ID
@@ -73,13 +74,21 @@ async def test_s6_sana_full_flow(client: TestClient, db: FakeSupabase) -> None:
     # The agent ran on the fired event as a background task.
     attempts = rows_for(db, "execution_attempts", case_id)
     assert len(attempts) == 1
-    # Phase 4's decide stub always plays the playbook's conservative default arm,
-    # which for failed_payment is a silent retry. S6's catalogue entry names
-    # `whatsapp_payment_link` as its expected path — that is the Phase 6 bandit's
-    # choice, not this phase's, and asserting it here would be asserting a
-    # behaviour no code in the repo has yet.
-    assert attempts[0]["action_type"] == "retry_charge"
-    assert attempts[0]["adapter"] == "razorpay_subscriptions_simulated"
+    # Phase 6's bandit now makes this choice, and the seeded priors for Sana's
+    # context (SBI UPI, afternoon, no LTV yet) put `whatsapp_payment_link` well
+    # ahead — which is the path scenarios.md scripts for S6. Phase 4 asserted a
+    # silent retry here because the stub always played the conservative default.
+    assert attempts[0]["action_type"] == "send_whatsapp"
+    assert attempts[0]["adapter"] == "whatsapp_business_simulated"
+
+    decision = rows_for(db, "agent_decisions", case_id)[0]
+    assert decision["decision_source"] == "bandit"
+    assert decision["bandit_chosen_arm"] == "whatsapp_payment_link"
+    assert decision["bandit_context_vector"]["bank"] == "SBI"
+
+    # A message is an attempt, not a recovery: the case has to stay open for
+    # Sana's "STOP" to have something to stop.
+    assert db.find_one("recovery_cases", case_id)["status"] == "in_flight"  # type: ignore[index]
 
     trail = [row["event"] for row in rows_for(db, "audit_events", case_id)]
     for step in (
@@ -106,11 +115,20 @@ async def test_s6_sana_full_flow(client: TestClient, db: FakeSupabase) -> None:
     result = await process_event(event_id, MERCHANT_ID, db)
     assert result is not None
     assert result.case_id == case_id
-    # Blocked at the guardrail — a retry seconds after the last one is inside the
-    # RBI spacing window — and the opt-out is honoured regardless.
+    # The stronger property, and the one that matters: the guardrail *permitted*
+    # this send — it is a message, not a retry, so no RBI spacing window applies,
+    # and consent was still on record at check time — and the agent sent nothing
+    # anyway, because it read Sana's unprocessed reply before acting on its own
+    # decision. Compliance here comes from hearing first, not from happening to
+    # be blocked.
     assert result.guardrail is not None
-    assert result.guardrail.blocking_check == "rbi_min_hours_between_retries"
+    assert result.guardrail.verdict == "PASS"
+    assert result.guardrail.blocking_check is None
     assert result.listen is not None and result.listen.opt_out_signal is True
+    assert StepName.EXECUTE not in result.steps_completed
+
+    # Still exactly one attempt: the one from the first pass, before she replied.
+    assert len(rows_for(db, "execution_attempts", case_id)) == 1
 
     sana = [c for c in db.rows("customers") if c["external_id"] == "cust_sana_khatri"][0]
     consent = sana["consent"]
