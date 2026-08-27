@@ -26,7 +26,7 @@ set -euo pipefail
 # Resolve paths from the script's own location, so this runs from anywhere.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PREFIX="${1:-recover-aa}"          # lowercase, 3-8 chars, letters/digits/hyphen
+PREFIX="${1:-recover-aa}"          # lowercase, 3-12 chars, letters/digits/hyphen
 LOCATION="${2:-centralindia}"      # centralindia / southindia keep latency low for Indian users
 ENVIRONMENT_NAME="${3:-prod}"
 
@@ -46,11 +46,12 @@ if ! az account show >/dev/null 2>&1; then
   exit 1
 fi
 
-# The ACR name is derived as <prefix><environment>acr with hyphens stripped, and
-# Azure requires 5-50 alphanumeric characters for it. Catching a bad prefix here
-# beats catching it four minutes into a deployment.
-if [[ ! "$PREFIX" =~ ^[a-z][a-z0-9-]{2,19}$ ]]; then
-  echo "ERROR: prefix must be lowercase, start with a letter, and be 3-20 chars of [a-z0-9-]." >&2
+# Every resource name derives from this prefix, and the tightest constraint is
+# the Key Vault's 24 characters against a "<prefix>-<environment>-kv" name — so
+# main.bicep caps the parameter at 12. Catching a bad prefix here beats catching
+# it four minutes into a deployment.
+if [[ ! "$PREFIX" =~ ^[a-z][a-z0-9-]{2,11}$ ]]; then
+  echo "ERROR: prefix must be lowercase, start with a letter, and be 3-12 chars of [a-z0-9-]." >&2
   exit 1
 fi
 
