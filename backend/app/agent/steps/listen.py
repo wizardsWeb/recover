@@ -2,14 +2,13 @@
 
 Indian customers reply in Hinglish, in Devanagari, in English, and in all three
 inside one sentence. "band karo yeh" and "STOP" mean the same thing and share no
-characters. Phase 5 hands this to Gemini, which is the only approach that
-generalises.
+characters, so Gemini classifies — it is the only approach that generalises.
 
-What lives here is the floor beneath that: a pattern matcher over the phrases
-the scripted scenarios use. It exists so the loop is testable without an LLM and
-so a Gemini outage cannot turn "STOP" into "no signal detected" — the one
-failure mode in this module that is a compliance breach rather than a missed
-recovery.
+The pattern matcher below is the floor beneath that, not dead code. It runs
+whenever the classifier is unavailable, off-schema, or unparseable, because the
+one failure mode in this module that is a compliance breach rather than a missed
+recovery is a Gemini outage turning "STOP" into "no signal detected". A
+classifier that can be down is only safe if something answers when it is.
 
 Matching is word-boundary, not substring. That distinction is load-bearing:
 ``"by"`` is a promise-to-pay token ("pay by Friday") and a substring of "maybe",
@@ -18,13 +17,31 @@ recovery on it.
 
 Order of evaluation is by consequence, most binding first: opt-out, then
 hardship, then churn, then promise. A message carrying two signals is resolved
-in favour of the one that most restricts what the agent may do next.
+in favour of the one that most restricts what the agent may do next — and the
+LLM prompt states the same order, so the two layers cannot disagree about which
+signal wins.
+
+The classification is written back onto the ``customer_replies`` row, into
+``llm_classification`` and ``applied_state_update``. That second column is also
+the "already handled" marker ``core`` filters on when it looks for a pending
+reply, so writing it here is what stops a later pass re-applying an opt-out that
+has already been honoured.
 """
 
 import re
+from datetime import UTC, datetime
 from typing import Any
 
+from app.agent.llm import make_gemini_client
 from app.agent.models import ListenResult, ReplyIntent
+from app.agent.prompts.listen_prompt import (
+    FALLBACK_LISTEN,
+    LISTEN_SCHEMA,
+    build_listen_prompt,
+)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # NOTE: "cancel" appears here and "cancel subscription" under CHURN_PATTERNS.
 # Opt-out is tested first, so a bare "cancel" revokes consent rather than
@@ -102,10 +119,12 @@ async def run_listen(
     customer_reply: dict[str, Any] | None,
     supabase_client: Any,
 ) -> ListenResult:
-    """Pattern-match the customer reply to classify intent.
+    """Classify the pending customer reply with Gemini, or by pattern if it fails.
 
-    Phase 5 replaces this with Gemini LLM classification that handles Hinglish,
-    mixed-language, and edge cases.
+    A pass with no reply still returns a ``ListenResult`` — intent ``UNKNOWN``,
+    every signal false — rather than ``None``. The timeline's nine steps stay
+    nine, and "nobody wrote back" reads as a fact instead of a gap that looks
+    like a crash.
     """
     if not customer_reply:
         return ListenResult(
@@ -117,12 +136,88 @@ async def run_listen(
             is_stub=True,
         )
 
-    raw = customer_reply.get("raw_text", "")
+    raw = str(customer_reply.get("raw_text") or "")
     reply_id = customer_reply.get("id")
+
+    result = await _classify(raw, reply_id, case, supabase_client)
+    _record_classification(supabase_client, reply_id, result)
+    return result
+
+
+async def _classify(
+    raw: str,
+    reply_id: Any,
+    case: dict[str, Any],
+    supabase_client: Any,
+) -> ListenResult:
+    """Gemini first, pattern matcher second. Never raises."""
+    client = make_gemini_client(supabase_client)
+    prompt = build_listen_prompt(raw, case)
+    payload = await client.generate_structured(prompt, LISTEN_SCHEMA, "listen", FALLBACK_LISTEN)
+
+    # Identity, not equality: `generate_structured` hands back the exact dict it
+    # was given on every failure path, so this is the unambiguous "no answer" test.
+    if payload is FALLBACK_LISTEN:
+        return _pattern_match_fallback(raw, reply_id)
+
+    try:
+        return ListenResult(
+            reply_id=str(reply_id) if reply_id else None,
+            intent=ReplyIntent(payload["intent"]),
+            language=str(payload.get("language") or "unknown"),
+            opt_out_signal=bool(payload.get("opt_out_signal")),
+            hardship_signal=bool(payload.get("hardship_signal")),
+            churn_signal=bool(payload.get("churn_signal")),
+            extracted_entities=dict(payload.get("extracted_entities") or {}),
+            recommended_state_update=payload.get("recommended_state_update"),
+            sentiment=payload.get("sentiment"),
+            confidence=payload.get("confidence"),
+            is_stub=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreadable classification must not lose the reply
+        logger.warning("listen_parse_failed", error=str(exc))
+        return _pattern_match_fallback(raw, reply_id)
+
+
+def _record_classification(
+    supabase_client: Any,
+    reply_id: Any,
+    result: ListenResult,
+) -> None:
+    """Store the classification on the reply row.
+
+    ``applied_state_update`` doubles as the "already handled" marker, so it is
+    never left null on a classified reply — ``NO_ACTION`` is written when the
+    classifier recommends nothing, because null would make the next pass pick
+    the same reply up again.
+    """
+    if not reply_id or supabase_client is None:
+        return
+    try:
+        supabase_client.table("customer_replies").update(
+            {
+                "llm_classification": result.model_dump(mode="json"),
+                "applied_state_update": result.recommended_state_update or "NO_ACTION",
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        ).eq("id", reply_id).execute()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("listen_classification_write_error", error=str(exc))
+
+
+def _pattern_match_fallback(raw: str, reply_id: Any = None) -> ListenResult:
+    """Classify by keyword when the LLM is unavailable.
+
+    Deliberately blunt and deliberately biased toward stopping. It cannot read
+    tone or extract entities, so ``sentiment`` and ``confidence`` stay ``None``
+    rather than being invented, and ``is_stub`` stays ``True`` so the UI can say
+    which layer answered.
+    """
+    reply_id_str = str(reply_id) if reply_id else None
 
     if _matches_any(raw, _OPT_OUT_RE):
         return ListenResult(
-            reply_id=reply_id,
+            reply_id=reply_id_str,
             intent=ReplyIntent.EXPLICIT_OPT_OUT,
             language="hinglish",
             opt_out_signal=True,
@@ -134,7 +229,7 @@ async def run_listen(
 
     if _matches_any(raw, _HARDSHIP_RE):
         return ListenResult(
-            reply_id=reply_id,
+            reply_id=reply_id_str,
             intent=ReplyIntent.HARDSHIP_SIGNAL,
             language="hinglish",
             opt_out_signal=False,
@@ -146,7 +241,7 @@ async def run_listen(
 
     if _matches_any(raw, _CHURN_RE):
         return ListenResult(
-            reply_id=reply_id,
+            reply_id=reply_id_str,
             intent=ReplyIntent.CHURN_CONFIRMATION,
             language="hinglish",
             opt_out_signal=False,
@@ -158,7 +253,7 @@ async def run_listen(
 
     if _matches_any(raw, _PROMISE_RE):
         return ListenResult(
-            reply_id=reply_id,
+            reply_id=reply_id_str,
             intent=ReplyIntent.PROMISE_TO_PAY,
             language="hinglish",
             opt_out_signal=False,
@@ -169,7 +264,7 @@ async def run_listen(
         )
 
     return ListenResult(
-        reply_id=reply_id,
+        reply_id=reply_id_str,
         intent=ReplyIntent.NEUTRAL,
         language="unknown",
         opt_out_signal=False,

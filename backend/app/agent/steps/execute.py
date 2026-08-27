@@ -19,13 +19,43 @@ The ``case`` dict this receives is the enriched one built by ``core``: the
 payload under ``metadata``. Adapters read those with ``.get`` and fall back to
 placeholders, so a case missing a phone number still produces a truthful
 attempt row rather than a ``KeyError``.
+
+**The copy is written before the dispatch, not inside it.** Any action that puts
+words in front of a customer goes through ``_generate_message`` first, and the
+generated body is stored on ``request_payload["body"]`` — the same field a real
+adapter would send. That ordering is what makes the message auditable: the
+timeline shows the exact text, whether or not a send ever happens, and a blocked
+or failed adapter cannot leave a message that was written but never recorded.
+The generation itself falls back to a neutral, amount-free template, so a Gemini
+outage sends something bland rather than something wrong.
 """
 
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from app.agent.guardrail import MESSAGE_ACTIONS
+from app.agent.llm import make_gemini_client
 from app.agent.models import ActionType, ExecutionResult, ExecutionStatus
+from app.agent.prompts.message_prompt import (
+    FALLBACK_MESSAGE,
+    MESSAGE_SCHEMA,
+    build_message_prompt,
+)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
+
+# The set of actions that put words in front of a customer is the guardrail's,
+# reused rather than restated. They must not drift: an action TRAI governs but
+# that generates no copy would be sent with an empty body, and one that
+# generates copy without being governed would skip the consent check.
+
+#: LTV boundaries in paise, for the one context feature the prompt takes as a
+#: bucket rather than a number. A model handed "2700000" reasons about the digits;
+#: handed "high" it reasons about the customer.
+_LTV_HIGH_CENTS = 1_000_000  # Rs 10,000
+_LTV_MEDIUM_CENTS = 200_000  # Rs 2,000
 
 #: ``execution_attempts.status`` accepts values this enum does not model
 #: (``pending``, ``cancelled``). Reading one back from the idempotency cache
@@ -50,8 +80,16 @@ async def run_execute(
     decision: dict[str, Any],
     supabase_client: Any,
     trace_id: str,
+    customer: dict[str, Any] | None = None,
+    merchant: dict[str, Any] | None = None,
 ) -> ExecutionResult:
-    """Dispatch the chosen action to the appropriate simulated adapter."""
+    """Dispatch the chosen action to the appropriate simulated adapter.
+
+    ``customer`` and ``merchant`` are optional and only feed message generation.
+    Without them the copy is still written, just with less context — which is
+    the right degradation, because an action the guardrail already cleared
+    should not be cancelled by a missing merchant row.
+    """
     action_type = decision.get("action_type", "no_op")
     idempotency_key = f"{case['id']}:{trace_id}:{action_type}"
 
@@ -74,7 +112,24 @@ async def run_execute(
             simulated=True,
         )
 
+    # Written before the dispatch so the body is on the attempt row regardless
+    # of what the adapter does with it. Non-messaging actions skip this entirely.
+    message = (
+        await _generate_message(
+            str(decision.get("chosen_arm") or action_type),
+            case,
+            customer,
+            merchant,
+            decision.get("action_params") or {},
+            supabase_client,
+        )
+        if action_type in MESSAGE_ACTIONS
+        else None
+    )
+
     adapter, result = await _dispatch(action_type, case, decision, trace_id)
+    if message is not None:
+        _attach_message(result, message)
 
     # Write execution attempt. `attempted_at` and `completed_at` are the same
     # instant because nothing here waits on a network — when real adapters land
@@ -104,6 +159,115 @@ async def run_execute(
         response_payload=result["response_payload"],
         simulated=True,
     )
+
+
+def _ltv_bucket(ltv_cents: Any) -> str:
+    """Coarse LTV band for the message prompt."""
+    value = int(ltv_cents or 0)
+    if value >= _LTV_HIGH_CENTS:
+        return "high"
+    if value >= _LTV_MEDIUM_CENTS:
+        return "medium"
+    return "low"
+
+
+def _order_context(case: dict[str, Any], customer: dict[str, Any] | None) -> str:
+    """One line naming what the customer is actually being asked to pay for.
+
+    Generic copy ("your recent payment") converts far worse than copy that names
+    the thing — Priya's serum, Meera's 60 crates, Aarav's coaching. Each playbook
+    keeps that detail in a different place, so the lookup is per event shape
+    rather than one hopeful ``.get``.
+    """
+    metadata = case.get("metadata") or {}
+    customer_meta = (customer or {}).get("metadata") or {}
+
+    items = metadata.get("items")
+    if isinstance(items, list) and items:
+        names = [str(item.get("name") or item.get("title") or "item") for item in items]
+        return ", ".join(names)
+
+    if metadata.get("invoice_id"):
+        return (
+            f"invoice {metadata['invoice_id']}, {metadata.get('invoice_items', 'goods supplied')}, "
+            f"due {metadata.get('due_date', 'earlier')}, "
+            f"{metadata.get('days_overdue', 'several')} days overdue"
+        )
+
+    if customer_meta.get("subscription_purpose"):
+        purpose = str(customer_meta["subscription_purpose"]).replace("_", " ")
+        child = customer_meta.get("child_name")
+        return f"{child}'s {purpose} subscription, monthly" if child else f"{purpose} subscription"
+
+    return str(customer_meta.get("order_contents") or "your order")
+
+
+async def _generate_message(
+    arm_name: str,
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    merchant: dict[str, Any] | None,
+    action_params: dict[str, Any],
+    supabase_client: Any,
+) -> dict[str, Any]:
+    """Write the customer-facing copy for one action.
+
+    Never raises and always returns a schema-shaped dict — ``FALLBACK_MESSAGE``
+    when Gemini is unavailable. The caller therefore has no success branch to
+    forget, and the worst case is a neutral template rather than no message.
+
+    The payment link is passed as the literal ``[payment link]`` placeholder.
+    The real short URL is minted inside the payment-link adapter, *after* this
+    runs, and asking the model to write a URL it has not been given is the
+    fastest way to get a hallucinated one in front of a customer.
+    """
+    customer = customer or {}
+    merchant = merchant or {}
+    customer_meta = customer.get("metadata") or {}
+
+    full_name = str(customer.get("name") or case.get("customer_name") or "there")
+    prompt = build_message_prompt(
+        merchant_name=str(merchant.get("name") or "your merchant"),
+        merchant_vertical=str(merchant.get("vertical") or "other"),
+        playbook=str(case.get("playbook") or "unknown"),
+        arm_name=arm_name,
+        amount_inr=int(case.get("amount_at_risk_cents") or 0) // 100,
+        customer_first_name=full_name.split()[0],
+        preferred_language=str(customer_meta.get("preferred_language") or "hinglish"),
+        ltv_bucket=_ltv_bucket(customer.get("ltv_cents")),
+        tenure_days=int(customer.get("tenure_days") or 0),
+        discount_pct=float(action_params.get("discount_pct") or 0),
+        channel=str(action_params.get("channel") or "whatsapp"),
+        payment_link_url="[payment link]",
+        cart_items=_order_context(case, customer),
+    )
+
+    client = make_gemini_client(supabase_client)
+    return await client.generate_structured(prompt, MESSAGE_SCHEMA, "message", FALLBACK_MESSAGE)
+
+
+def _attach_message(result: dict[str, Any], message: dict[str, Any]) -> None:
+    """Fold the generated copy into an adapter's request and response payloads.
+
+    Done here rather than inside each adapter so the four messaging branches
+    cannot drift — a body that lands on the WhatsApp attempt but not the SMS one
+    is a gap the timeline would show as a message that was never written.
+    """
+    request = result["request_payload"]
+    request["body"] = message.get("text", "")
+    if "subject" in request:
+        request["subject"] = message.get("cta_text") or request["subject"]
+
+    result["response_payload"]["message_generation"] = {
+        "tone": message.get("tone"),
+        "language": message.get("language"),
+        "generation_reasoning": message.get("generation_reasoning"),
+        "discount_mentioned": message.get("discount_mentioned"),
+        "cta_text": message.get("cta_text"),
+        # False whenever the copy came from FALLBACK_MESSAGE, which is what lets
+        # the UI label a neutral template as a template rather than as generated.
+        "is_llm_generated": message is not FALLBACK_MESSAGE,
+    }
 
 
 async def _dispatch(
@@ -172,7 +336,9 @@ async def _dispatch(
         return "sms_simulated", {
             "request_payload": {
                 "to": case.get("customer_phone", "+919999999999"),
-                "body": "[simulated SMS]",
+                # Overwritten by `_attach_message`; present so the key exists
+                # even on the path where generation is skipped.
+                "body": "[no message generated]",
             },
             "response_payload": {"sid": f"SMsim{uuid.uuid4().hex[:8]}", "status": "sent"},
             "status": "success",

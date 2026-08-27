@@ -84,6 +84,12 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "metadata": None,
     },
     "audit_events": {"case_id": None, "details": None, "trace_id": None},
+    "llm_cache": {
+        "input_tokens": None,
+        "output_tokens": None,
+        "latency_ms": None,
+        "hit_count": 0,
+    },
 }
 
 #: Timestamp column each table orders by, filled in on insert.
@@ -132,6 +138,7 @@ class _Query:
         self._embed: str | None = None
         self._count: str | None = None
         self._range: tuple[int, int] | None = None
+        self._on_conflict: str | None = None
 
     # -- operations ---------------------------------------------------------
 
@@ -152,6 +159,16 @@ class _Query:
     def update(self, payload: dict[str, Any], **_: Any) -> _Query:
         self._op = "update"
         self._payload = payload
+        return self
+
+    def upsert(self, payload: Any, **kwargs: Any) -> _Query:
+        # `on_conflict` names the column PostgREST resolves the conflict on. The
+        # fake honours it rather than ignoring it, because a test that passes
+        # against an upsert-as-insert would hide a duplicate-key error that only
+        # appears against a real UNIQUE constraint.
+        self._op = "upsert"
+        self._payload = payload
+        self._on_conflict = kwargs.get("on_conflict")
         return self
 
     def delete(self, **_: Any) -> _Query:
@@ -253,6 +270,23 @@ class _Query:
             payload = self._payload if isinstance(self._payload, list) else [self._payload]
             inserted = [self._db.insert_row(self._table, dict(item)) for item in payload]
             return _Result(inserted)
+
+        if self._op == "upsert":
+            payload = self._payload if isinstance(self._payload, list) else [self._payload]
+            written: list[dict[str, Any]] = []
+            for item in payload:
+                existing = None
+                if self._on_conflict:
+                    key = self._on_conflict
+                    existing = next(
+                        (row for row in rows if row.get(key) == item.get(key)), None
+                    )
+                if existing is not None:
+                    existing.update(item)
+                    written.append(dict(existing))
+                else:
+                    written.append(self._db.insert_row(self._table, dict(item)))
+            return _Result(written)
 
         matched = [row for row in rows if self._matches(row)]
 

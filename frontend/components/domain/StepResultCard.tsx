@@ -37,12 +37,15 @@ export function StepResultCard({
   status,
   timestamp,
   details,
+  badge,
   children,
 }: {
   stepName: string;
   status: StepStatus;
   timestamp: string;
   details?: Record<string, unknown>;
+  /** Rendered in the collapsed header, so provenance is visible without a click. */
+  badge?: ReactNode;
   children?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -61,6 +64,7 @@ export function StepResultCard({
         >
           {stepName}
         </span>
+        {badge}
         <span className="ml-auto font-mono text-xs text-ink-faint">
           {IST_TIME.format(new Date(timestamp))}
         </span>
