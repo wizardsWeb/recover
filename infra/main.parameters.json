@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "supabaseUrl": { "value": "https://REPLACE-ME.supabase.co" },
+    "supabaseAnonKey": { "value": "REPLACE-ME" },
+    "environment": { "value": "prod" }
+  }
+}
