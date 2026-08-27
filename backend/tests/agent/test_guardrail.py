@@ -153,9 +153,7 @@ async def test_failed_attempts_do_not_count_toward_the_daily_limit(
     make_attempt(
         db, case["id"], action_type="send_whatsapp", status="failure", attempted_at=sent_at
     )
-    make_attempt(
-        db, case["id"], action_type="send_sms", status="failure", attempted_at=sent_at
-    )
+    make_attempt(db, case["id"], action_type="send_sms", status="failure", attempted_at=sent_at)
 
     result = await run_guardrail(case, whatsapp_decision(), customer, db)
 

@@ -158,6 +158,15 @@ resource kvRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 // Seeded secrets. The two Supabase public values come from parameters; the
 // genuinely secret ones are seeded as REPLACE_ME and set out of band, so no
 // real credential is ever in this repository or in a deployment history.
+//
+// The corollary, and it bites: **every deployment resets these three to
+// REPLACE_ME.** That is the cost of keeping them out of the deployment history
+// — a `@secure()` param would survive redeploys but would put the value in the
+// ARM deployment record, which is the thing this design refuses. So after any
+// `az deployment group create`, re-run the three `az keyvault secret set`
+// commands and restart the backend revision, or it will boot with placeholder
+// credentials: Supabase auth fails closed, and GEMINI_API_KEY being a
+// non-empty non-key means every LLM step quietly returns its fallback.
 resource kvSecretSupabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'supabase-url'
@@ -186,7 +195,7 @@ resource kvSecretSupabaseJwt 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'supabase-jwt-secret'
   properties: {
-    value: 'this-is-my-secret'
+    value: 'REPLACE_ME'
   }
 }
 

@@ -63,9 +63,7 @@ class _StubClient:
 def test_ready_returns_200_when_supabase_answers(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        health, "get_service_client", lambda: _StubClient(lambda: {"data": []})
-    )
+    monkeypatch.setattr(health, "get_service_client", lambda: _StubClient(lambda: {"data": []}))
 
     response = client.get("/health/ready")
 

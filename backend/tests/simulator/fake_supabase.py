@@ -278,9 +278,7 @@ class _Query:
                 existing = None
                 if self._on_conflict:
                     key = self._on_conflict
-                    existing = next(
-                        (row for row in rows if row.get(key) == item.get(key)), None
-                    )
+                    existing = next((row for row in rows if row.get(key) == item.get(key)), None)
                 if existing is not None:
                     existing.update(item)
                     written.append(dict(existing))

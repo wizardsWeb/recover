@@ -140,9 +140,7 @@ def _fire(
 ) -> dict[str, Any]:
     """Run the five common steps and return the standard response body."""
     customer = get_or_create_customer(supabase_client, merchant_id, persona)
-    event = _insert_event(
-        supabase_client, merchant_id, customer["id"], event_type, payload
-    )
+    event = _insert_event(supabase_client, merchant_id, customer["id"], event_type, payload)
     case = _open_case(
         supabase_client,
         merchant_id,

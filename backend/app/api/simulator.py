@@ -90,6 +90,10 @@ class LoadedCounts(CamelModel):
     customers_created: int
     payment_methods: int
     personas: list[str]
+    #: The demo bandit priors go in with the fixtures — without them every
+    #: scenario cold-starts and picks an arm at random.
+    bandit_priors_seeded: bool = False
+    bandit_prior_rows: int = 0
 
 
 class LoadResponse(CamelModel):
@@ -228,15 +232,16 @@ def _require_onboarded_merchant(supabase: Any, user_id: str) -> None:
 
 
 @router.post("/fixtures/load", response_model=LoadResponse)
-def load_fixtures(user_id: CurrentUserId, supabase: UserSupabase) -> LoadResponse:
-    """Load the six personas, the B3 cohort, and their payment methods."""
+async def load_fixtures(user_id: CurrentUserId, supabase: UserSupabase) -> LoadResponse:
+    """Load the six personas, the B3 cohort, their payment methods, and the priors."""
     _require_onboarded_merchant(supabase, user_id)
-    result = loader.load_fixtures_for_merchant(supabase, user_id, _trace_id())
+    result = await loader.load_fixtures_for_merchant(supabase, user_id, _trace_id())
     return LoadResponse(
         loaded=LoadedCounts.model_validate(result),
         message=(
-            f"Loaded {result['customers']} fixture customers "
-            f"and {result['payment_methods']} payment methods."
+            f"Loaded {result['customers']} fixture customers, "
+            f"{result['payment_methods']} payment methods "
+            f"and {result['bandit_prior_rows']} bandit priors."
         ),
     )
 

@@ -49,6 +49,59 @@ def freeze_time(monkeypatch: pytest.MonkeyPatch, module: Any, when: datetime) ->
 
 
 @pytest.fixture
+def deterministic_bandit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make Thompson Sampling pick the highest posterior mean, every time.
+
+    The bandit is deliberately randomised, which is correct for the policy and
+    ruinous for a test that asserts on the arm it chose: every loop assertion
+    downstream of DECIDE would flake at some rate. Replacing the draw with the
+    posterior mean keeps the whole selection path under test — fetching,
+    ranking, the explore/exploit label, the alternatives list — while making the
+    winner a function of the data rather than of the seed.
+
+    With every arm at its flat prior all means tie at 0.5, and ``sorted`` is
+    stable, so a tie resolves to the playbook's arm order. Tests that care about
+    a specific arm seed a posterior for it rather than relying on that.
+
+    ``tests/agent/test_bandit_thompson.py`` deliberately does *not* use this —
+    the randomness is the thing it tests.
+    """
+    from app.agent.bandit import thompson
+
+    def _mean(alpha: float, beta: float) -> float:
+        mass = alpha + beta
+        return (alpha / mass) if mass > 0 else 0.5
+
+    monkeypatch.setattr(thompson, "sample_beta", _mean)
+
+
+def seed_posterior(
+    db: FakeSupabase,
+    *,
+    playbook: str,
+    arm_name: str,
+    context_bucket: str,
+    alpha: float,
+    beta: float,
+    n_pulls: int = 0,
+    merchant_id: str = MERCHANT_ID,
+) -> dict[str, Any]:
+    """Give one arm a history, so a test can name the arm the bandit will pick."""
+    return db.insert_row(
+        "bandit_posteriors",
+        {
+            "merchant_id": merchant_id,
+            "playbook": playbook,
+            "arm_name": arm_name,
+            "context_bucket": context_bucket,
+            "alpha": alpha,
+            "beta": beta,
+            "n_pulls": n_pulls,
+        },
+    )
+
+
+@pytest.fixture
 def db() -> FakeSupabase:
     fake = FakeSupabase()
     fake.seed_merchant(MERCHANT_ID)
