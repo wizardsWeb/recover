@@ -72,6 +72,9 @@ async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
         "decide:decision_made",
         "guardrail:guardrail_pass",
         "execute:execution_attempted",
+        # Listen is audited even with no reply waiting, so the trail always shows
+        # that the agent looked.
+        "listen:reply_classified",
     ]
 
     attempts = rows_for(db, "execution_attempts", case["id"])
@@ -81,7 +84,9 @@ async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
 
     decisions = rows_for(db, "agent_decisions", case["id"])
     assert len(decisions) == 1
-    assert decisions[0]["step_number"] == 1
+    # step_number is the decide step's position in the nine-step loop, not the
+    # Nth decision on this case.
+    assert decisions[0]["step_number"] == 4
     assert decisions[0]["decision_source"] == "rule"
     # The counterfactual is recorded, not just the winner.
     assert len(decisions[0]["bandit_alternatives"]) == 8
