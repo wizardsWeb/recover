@@ -63,6 +63,16 @@ async def post_reward(
         return
 
     try:
+        # An arm the agent never got to play has no observation attached to it.
+        # A case blocked at the guardrail, or skipped by the uplift check, closes
+        # without anything reaching the customer — crediting a failure there
+        # would teach the bandit that the arm does not work, when what actually
+        # happened is that a compliance rule stopped it being tried. The bandit
+        # learns from pulls; this is the check that only pulls are counted.
+        if not _has_execution_attempt(supabase_client, case_id):
+            log.info("reward_skipped_never_executed")
+            return
+
         decision = _fetch_decide_row(supabase_client, case_id)
         if not decision:
             log.info("reward_skipped_no_decision")
@@ -112,6 +122,18 @@ async def post_reward(
         )
     except Exception as exc:  # noqa: BLE001 - learning must never break a closed case
         log.warning("reward_post_error", error=str(exc))
+
+
+def _has_execution_attempt(supabase_client: Any, case_id: str) -> bool:
+    """Whether any action on this case actually reached an adapter."""
+    resp = (
+        supabase_client.table("execution_attempts")
+        .select("id")
+        .eq("case_id", case_id)
+        .limit(1)
+        .execute()
+    )
+    return bool(resp.data)
 
 
 def _fetch_decide_row(supabase_client: Any, case_id: str) -> dict[str, Any] | None:
