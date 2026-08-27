@@ -30,9 +30,7 @@ async def get_overview(
     supabase: UserSupabase,
 ) -> dict[str, Any]:
     """Return the KPI summary for the dashboard home ticker."""
-    today_start = (
-        datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    )
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
     opened = (
         supabase.table("recovery_cases")

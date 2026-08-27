@@ -45,9 +45,7 @@ TRAI_QUIET_END_HOUR = 9  # 9 AM IST
 #: Actions that put a message in front of a human. Everything TRAI governs, and
 #: everything that needs channel consent, is in this set — a silent retry is
 #: neither a communication nor an interruption.
-MESSAGE_ACTIONS = frozenset(
-    {"send_whatsapp", "send_sms", "send_email", "send_payment_link"}
-)
+MESSAGE_ACTIONS = frozenset({"send_whatsapp", "send_sms", "send_email", "send_payment_link"})
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -237,9 +235,7 @@ async def run_guardrail(
                 GuardrailCheckResult(
                     check_name="rbi_min_hours_between_retries",
                     passed=hours_since >= min_hours,
-                    reason=(
-                        f"Only {hours_since:.1f}h since last retry; RBI requires {min_hours}h"
-                    )
+                    reason=(f"Only {hours_since:.1f}h since last retry; RBI requires {min_hours}h")
                     if hours_since < min_hours
                     else None,
                 )
