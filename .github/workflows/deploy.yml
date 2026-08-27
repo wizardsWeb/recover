@@ -1,0 +1,163 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deployments are not superseded the way a typecheck run is: cancelling one
+# mid-flight can leave a Container App on a revision no commit corresponds to.
+# So queue instead of cancel.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  BACKEND_APP: ${{ secrets.BACKEND_APP_NAME }}
+  FRONTEND_APP: ${{ secrets.FRONTEND_APP_NAME }}
+
+jobs:
+  build-backend:
+    name: Build & push backend
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Compute image tag
+        id: meta
+        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push backend image
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/recover-backend:${{ steps.meta.outputs.image_tag }}"
+          docker build \
+            -t "$IMAGE" \
+            -t "${ACR_NAME}.azurecr.io/recover-backend:latest" \
+            -f backend/Dockerfile backend/
+          docker push "$IMAGE"
+          docker push "${ACR_NAME}.azurecr.io/recover-backend:latest"
+
+  build-frontend:
+    name: Build & push frontend
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Compute image tag
+        id: meta
+        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # The NEXT_PUBLIC_* values are build args, not env vars. Next inlines them
+      # into the browser bundle during `next build`, so setting them on the
+      # Container App later has no effect on what a browser actually loads.
+      - name: Build & push frontend image
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/recover-frontend:${{ steps.meta.outputs.image_tag }}"
+          docker build \
+            -t "$IMAGE" \
+            -t "${ACR_NAME}.azurecr.io/recover-frontend:latest" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="${{ secrets.NEXT_PUBLIC_API_BASE_URL }}" \
+            --build-arg NEXT_PUBLIC_APP_URL="${{ secrets.NEXT_PUBLIC_APP_URL }}" \
+            --build-arg NEXT_PUBLIC_ENVIRONMENT="production" \
+            -f frontend/Dockerfile frontend/
+          docker push "$IMAGE"
+          docker push "${ACR_NAME}.azurecr.io/recover-frontend:latest"
+
+  deploy-backend:
+    name: Deploy backend
+    needs: build-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # `containerapp` is an az extension, not a built-in. Without this the
+      # first `az containerapp` call in a fresh runner stops to ask whether to
+      # install it, which in CI reads as a hang and then a failure.
+      - name: Ensure containerapp extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      # The commit-SHA tag, not :latest — a revision should say exactly which
+      # commit it is running.
+      - name: Update backend Container App
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/recover-backend:${{ needs.build-backend.outputs.image_tag }}"
+          az containerapp update \
+            --name "$BACKEND_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE"
+
+  deploy-frontend:
+    name: Deploy frontend
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ensure containerapp extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      - name: Update frontend Container App
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/recover-frontend:${{ needs.build-frontend.outputs.image_tag }}"
+          az containerapp update \
+            --name "$FRONTEND_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE"
+
+  verify:
+    name: Verify
+    needs: [deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      # A revision is reported updated before it has finished taking traffic.
+      - name: Wait for propagation
+        run: sleep 30
+
+      - name: Verify backend health
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "${{ secrets.NEXT_PUBLIC_API_BASE_URL }}/health"; then
+              echo ""
+              echo "Backend healthy"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Backend health check failed after 12 attempts"
+          exit 1
+
+      - name: Verify frontend
+        run: |
+          curl -fsS -o /dev/null -w "frontend responded %{http_code}\n" \
+            "${{ secrets.NEXT_PUBLIC_APP_URL }}"
