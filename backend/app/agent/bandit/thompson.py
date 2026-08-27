@@ -170,7 +170,7 @@ async def fetch_posteriors(
     return result
 
 
-async def write_posterior(
+def write_posterior(
     supabase_client: Any,
     merchant_id: str,
     playbook: str,
@@ -187,6 +187,10 @@ async def write_posterior(
     target ``(merchant_id, playbook, arm_name, context_bucket)`` is awkward
     through the client, and every caller has to read the current alpha before it
     can compute the next one anyway — so reading first costs nothing.
+
+    Plain ``def``: the Supabase Python client is synchronous, so there is
+    nothing here to await, and marking it ``async`` would invite a caller to
+    forget the ``await`` and silently write nothing.
 
     This is a read-modify-write and is **not atomic**. Two passes closing the
     same context in the same instant can lose one increment. Against a posterior
@@ -251,7 +255,7 @@ async def update_posterior(
         else:
             beta += 1.0
 
-        await write_posterior(
+        write_posterior(
             supabase_client,
             merchant_id,
             playbook,

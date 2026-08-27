@@ -43,12 +43,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.agent import audit
+from app.agent.bandit.reward import post_reward
 from app.agent.guardrail import run_guardrail
 from app.agent.models import (
+    ActionType,
     AgentLoopResult,
     CaseStatus,
     DecisionResult,
     DiagnosisResult,
+    ExecutionStatus,
     GuardrailResult,
     ListenResult,
     Playbook,
@@ -71,6 +74,11 @@ _DOWNGRADE_PREFIX = "switch_to_"
 
 #: Statuses that mean a case is still the agent's to work on.
 _ACTIVE_STATUSES = ["open", "in_flight"]
+
+#: Statuses a case does not come back from. Reaching one closes the case and is
+#: what makes the outcome safe to hand to the bandit — a case still in flight
+#: has no outcome to learn from yet.
+_TERMINAL_STATUSES = frozenset({CaseStatus.RECOVERED, CaseStatus.STOPPED})
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -304,6 +312,58 @@ async def run_agent_loop(
                 listen=listen,
             )
 
+        # ── HEAR BEFORE SPEAK ──────────────────────────────────────────
+        # An inbound reply nobody has processed yet outranks the action the
+        # agent was about to take.
+        #
+        # LISTEN sits after EXECUTE in the loop order, which is right when the
+        # reply is a response to what was just sent. It is wrong when the reply
+        # arrived *before* this pass started: sending first would put a second
+        # message in front of a customer whose unread message says "STOP". Until
+        # Phase 6 this was masked — every arm was a retry, and the RBI spacing
+        # window happened to block the second pass — so the gap only became
+        # reachable once the bandit started choosing message arms.
+        #
+        # The reply is consumed here, so the LISTEN stage below is skipped
+        # rather than run twice on nothing.
+        heard_early = False
+        if pending_reply:
+            listen, early_status, early_reason = await _run_listen_stage(
+                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+            )
+            steps_completed.append(StepName.LISTEN)
+            heard_early = True
+            log.info("heard_before_execute", intent=listen.intent.value)
+
+            if early_status is CaseStatus.STOPPED:
+                await _close_case(
+                    supabase_client,
+                    case_id,
+                    early_status,
+                    early_reason or "Customer reply ended the recovery",
+                    trace_id,
+                    merchant_id,
+                )
+                steps_completed.append(StepName.AUDIT)
+                await post_reward(
+                    supabase_client,
+                    {**case, "status": early_status.value, "amount_recovered_cents": 0},
+                    early_status.value,
+                    trace_id,
+                )
+                return AgentLoopResult(
+                    case_id=case_id,
+                    trace_id=trace_id,
+                    playbook=playbook_enum,
+                    steps_completed=steps_completed,
+                    final_status=early_status,
+                    diagnosis=diagnosis,
+                    uplift=uplift,
+                    decision=decision,
+                    guardrail=guardrail,
+                    listen=listen,
+                )
+
         # ── STEP 6: EXECUTE ────────────────────────────────────────────
         # FUTURE PHASE swaps the simulated adapters for real API calls; the
         # idempotency key and the attempt row stay exactly as they are.
@@ -329,16 +389,52 @@ async def run_agent_loop(
         )
         log.info("step_execute_complete", adapter=execution.adapter, status=execution.status.value)
 
+        # Whether this execution counts as the money coming back.
+        #
+        # Only a charge does. A successful `retry_charge` means the mandate was
+        # debited — scenarios.md S1 ends exactly there, with Rs 2,999 charged.
+        # A successful `send_whatsapp` means a message left the building, which
+        # is an attempt, not a recovery: the case stays in flight until the
+        # customer acts. Counting sends as recoveries would close every case at
+        # step 6, and the reply-driven paths — S5's churn handoff, S6's opt-out —
+        # would become unreachable, because there would be no open case left for
+        # the reply to land on.
+        charge_succeeded = (
+            execution.status is ExecutionStatus.SUCCESS
+            and execution.action_type is ActionType.RETRY_CHARGE
+        )
+
         # ── STEP 7: LISTEN ─────────────────────────────────────────────
         # PHASE 5 replaces pattern matching with Gemini classification.
         # Runs whether or not a reply is waiting: a pass with no reply still
         # produces a ListenResult (intent UNKNOWN), which keeps the timeline's
         # nine steps honest rather than leaving a gap that reads as a crash.
-        listen, final_status, close_reason = await _run_listen_stage(
-            supabase_client, case, customer, pending_reply, trace_id, merchant_id
+        if heard_early:
+            # Already heard above, and the reply did not end the case.
+            final_status, close_reason = CaseStatus.IN_FLIGHT, None
+        else:
+            listen, final_status, close_reason = await _run_listen_stage(
+                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+            )
+            steps_completed.append(StepName.LISTEN)
+
+        # A recovery only stands if the customer did not just tell us to stop.
+        # "We took your money and you asked us to leave you alone" is two facts,
+        # and the second one governs what happens next.
+        if charge_succeeded and final_status is CaseStatus.IN_FLIGHT:
+            final_status = CaseStatus.RECOVERED
+            close_reason = "Retry charge succeeded — amount recovered"
+            mark_case_recovered(
+                supabase_client,
+                case_id,
+                int(case.get("amount_at_risk_cents") or 0),
+                trace_id,
+            )
+        log.info(
+            "step_listen_complete",
+            intent=listen.intent.value if listen else "none",
+            heard_before_execute=heard_early,
         )
-        steps_completed.append(StepName.LISTEN)
-        log.info("step_listen_complete", intent=listen.intent.value)
 
         # ── STEP 8: LEARN ──────────────────────────────────────────────
         # PHASE 6 wires bandit reward updates; PHASE 9 uplift training data;
@@ -349,11 +445,31 @@ async def run_agent_loop(
         # ── STEP 9: AUDIT (closure) ────────────────────────────────────
         # Terminal states get a closing row; a case still in flight does not,
         # because the next pass keeps writing to the same trail.
-        if final_status is CaseStatus.STOPPED and close_reason:
+        if final_status in _TERMINAL_STATUSES and close_reason:
             await _close_case(
                 supabase_client, case_id, final_status, close_reason, trace_id, merchant_id
             )
         steps_completed.append(StepName.AUDIT)
+
+        # The bandit only learns if outcomes reach the arm that caused them.
+        # Posted once, after the case has reached its terminal state, and only
+        # then: rewarding a case still in flight would credit an arm for an
+        # outcome that has not happened.
+        if final_status in _TERMINAL_STATUSES:
+            await post_reward(
+                supabase_client,
+                {
+                    **case,
+                    "status": final_status.value,
+                    "amount_recovered_cents": (
+                        int(case.get("amount_at_risk_cents") or 0)
+                        if final_status is CaseStatus.RECOVERED
+                        else 0
+                    ),
+                },
+                final_status.value,
+                trace_id,
+            )
 
         _mark_event_processed(supabase_client, event)
 
@@ -703,6 +819,38 @@ def _update_case(supabase_client: Any, case_id: str, changes: dict[str, Any]) ->
         ).eq("id", case_id).execute()
     except Exception as exc:  # noqa: BLE001
         logger.warning("case_update_error", case_id=case_id, error=str(exc))
+
+
+def mark_case_recovered(
+    supabase_client: Any,
+    case_id: str,
+    amount_at_risk_cents: int,
+    trace_id: str,
+) -> None:
+    """Record that the money came back.
+
+    Called only when a charge actually succeeded — see the ``charge_succeeded``
+    check in the loop. ``amount_recovered_cents`` is set to the full amount at
+    risk because the simulated adapters either charge the whole thing or fail;
+    a real adapter reporting a partial settlement would pass its own figure, and
+    the amount-normalised reward in ``bandit.reward`` already handles fractions.
+    """
+    _update_case(
+        supabase_client,
+        case_id,
+        {
+            "status": CaseStatus.RECOVERED.value,
+            "amount_recovered_cents": amount_at_risk_cents,
+            "closed_at": datetime.now(UTC).isoformat(),
+            "current_step": StepName.LEARN.value,
+        },
+    )
+    logger.info(
+        "case_recovered",
+        case_id=case_id,
+        amount_cents=amount_at_risk_cents,
+        trace_id=trace_id,
+    )
 
 
 def _mark_event_processed(supabase_client: Any, event: dict[str, Any]) -> None:
