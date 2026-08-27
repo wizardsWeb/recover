@@ -156,6 +156,12 @@ class BanditAlternative(BaseModel):
     expected_reward: float
     chosen: bool
     not_chosen_reason: str | None = None
+    # The bandit's working: what this arm drew this round, what its posterior
+    # says on average, and how much evidence that average rests on. Kept
+    # optional so a rule-based decision can still fill the same shape.
+    sampled_theta: float | None = None
+    n_pulls: int | None = None
+    is_cold: bool | None = None
 
 
 class DecisionResult(BaseModel):
@@ -173,6 +179,10 @@ class DecisionResult(BaseModel):
     alternatives_considered: list[BanditAlternative] = Field(default_factory=list)
     reasoning: str
     message_tone: str | None = None
+    # The features the arm was chosen under. Stored on the decision row so the
+    # reward can be credited to the exact posterior the draw came from, even if
+    # the case's context would compute differently by the time it closes.
+    bandit_context_vector: dict[str, Any] = Field(default_factory=dict)
     is_stub: bool = True
 
 
