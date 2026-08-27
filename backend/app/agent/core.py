@@ -166,8 +166,12 @@ async def run_agent_loop(
         log.info("step_detect_complete", playbook=playbook)
 
         # ── STEP 2: DIAGNOSE ───────────────────────────────────────────
-        # PHASE 5 replaces the stub with causal DAG traversal + a Gemini call.
-        diagnosis = await run_diagnose(case, playbook)
+        # Gemini extracts the root cause; the playbook stub answers if it can't.
+        # The event and the customer row go in because the evidence lives there —
+        # the failure code on the payload, the recovery history on the customer.
+        diagnosis = await run_diagnose(
+            case, playbook, supabase_client, event=event, customer=customer
+        )
         steps_completed.append(StepName.DIAGNOSE)
         await audit.log_diagnosis(
             supabase_client, case_id, merchant_id, diagnosis.model_dump(), trace_id
