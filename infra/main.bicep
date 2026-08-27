@@ -4,13 +4,22 @@
 //   • Azure Container Registry
 //   • Log Analytics workspace + Application Insights
 //   • Azure Container Apps environment
-//   • Redis cache
 //   • Key Vault, with the backend's managed identity granted read on it
 //   • Two Container Apps: frontend and backend
 //
 // Idempotent: re-running updates in place. CI never touches this file — it
 // only swaps container images — so a Bicep change means re-running
 // infra/setup-azure.sh.
+//
+// Redis is dropped for now (see README §Cost, "Drop Redis until the phase
+// that needs it"): nothing in the backend reads REDIS_URL yet, and
+// Microsoft.Cache/redis (classic Azure Cache for Redis) is retired for new
+// deployments in some regions/subscriptions — az deployment fails with
+// "Azure Cache for Redis is retiring, create Azure Managed Redis instance
+// instead." Re-add it as Microsoft.Cache/redisEnterprise (Azure Managed
+// Redis) when a phase actually needs a cache; that resource has a different
+// shape (a cluster plus a `databases` child resource, different key/host
+// properties) so it is not a drop-in swap of the api version here.
 // ============================================================================
 
 @description('Short prefix, lowercase. Capped at 12 because the Key Vault name is derived from it and Azure allows 24 characters for that.')
@@ -46,7 +55,6 @@ var acrName          = replace('${namePrefix}${environment}acr', '-', '')
 var logAnalyticsName = '${namePrefix}-${environment}-logs'
 var appInsightsName  = '${namePrefix}-${environment}-ai'
 var envName          = '${namePrefix}-${environment}-env'
-var redisName        = '${namePrefix}-${environment}-redis'
 var kvName           = '${namePrefix}-${environment}-kv'
 var backendAppName   = '${namePrefix}-${environment}-backend'
 var frontendAppName  = '${namePrefix}-${environment}-frontend'
@@ -91,26 +99,6 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     Application_Type: 'web'
     WorkspaceResourceId: logAnalytics.id
     IngestionMode: 'LogAnalytics'
-  }
-}
-
-// ==================== Redis ====================
-// Unused until a later phase; provisioned now so the connection string is in
-// Key Vault and the backend does not need a redeploy to gain it. C0 is the
-// cheapest tier and is also the slowest thing in this template to create.
-resource redis 'Microsoft.Cache/redis@2023-08-01' = {
-  name: redisName
-  location: location
-  tags: tags
-  properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
-    }
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
   }
 }
 
@@ -198,7 +186,7 @@ resource kvSecretSupabaseJwt 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'supabase-jwt-secret'
   properties: {
-    value: 'REPLACE_ME'
+    value: 'this-is-my-secret'
   }
 }
 
@@ -207,14 +195,6 @@ resource kvSecretGeminiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'gemini-api-key'
   properties: {
     value: 'REPLACE_ME'
-  }
-}
-
-resource kvSecretRedisConn 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: kv
-  name: 'redis-url'
-  properties: {
-    value: 'rediss://:${redis.listKeys().primaryKey}@${redis.properties.hostName}:${redis.properties.sslPort}'
   }
 }
 
@@ -312,11 +292,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: kvSecretGeminiKey.properties.secretUri
           identity: backendUAMI.id
         }
-        {
-          name: 'redis-url'
-          keyVaultUrl: kvSecretRedisConn.properties.secretUri
-          identity: backendUAMI.id
-        }
       ]
     }
     template: {
@@ -364,10 +339,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'GEMINI_API_KEY'
               secretRef: 'gemini-api-key'
-            }
-            {
-              name: 'REDIS_URL'
-              secretRef: 'redis-url'
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
