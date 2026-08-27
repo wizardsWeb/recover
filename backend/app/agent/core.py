@@ -50,6 +50,7 @@ from app.agent.models import (
     DecisionResult,
     DiagnosisResult,
     GuardrailResult,
+    ListenResult,
     Playbook,
     StepName,
     UpliftVerdict,
@@ -193,13 +194,18 @@ async def run_agent_loop(
             {"uplift_bucket": uplift.bucket.value, "current_step": "uplift_check"},
         )
         if uplift.verdict == "SKIP":
-            await _close_case(
+            listen, exit_reason = await _hear_pending_reply(
                 supabase_client,
-                case_id,
-                CaseStatus.STOPPED,
-                "Uplift check: not a persuadable case",
+                case,
+                customer,
+                pending_reply,
                 trace_id,
                 merchant_id,
+                steps_completed,
+                fallback_reason="Uplift check: not a persuadable case",
+            )
+            await _close_case(
+                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
             )
             steps_completed.append(StepName.AUDIT)
             return AgentLoopResult(
@@ -210,6 +216,7 @@ async def run_agent_loop(
                 final_status=CaseStatus.STOPPED,
                 diagnosis=diagnosis,
                 uplift=uplift,
+                listen=listen,
             )
         log.info("step_uplift_complete", verdict=uplift.verdict)
 
@@ -255,13 +262,18 @@ async def run_agent_loop(
         # A second downgrade means every allowed channel has been tried, so there
         # is nowhere left to fall back to and it is treated as a block.
         if guardrail.verdict != "PASS":
-            await _close_case(
+            listen, exit_reason = await _hear_pending_reply(
                 supabase_client,
-                case_id,
-                CaseStatus.STOPPED,
-                f"Guardrail blocked: {guardrail.blocking_check}",
+                case,
+                customer,
+                pending_reply,
                 trace_id,
                 merchant_id,
+                steps_completed,
+                fallback_reason=f"Guardrail blocked: {guardrail.blocking_check}",
+            )
+            await _close_case(
+                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
             )
             steps_completed.append(StepName.AUDIT)
             return AgentLoopResult(
@@ -274,6 +286,7 @@ async def run_agent_loop(
                 uplift=uplift,
                 decision=decision,
                 guardrail=guardrail,
+                listen=listen,
             )
 
         # ── STEP 6: EXECUTE ────────────────────────────────────────────
@@ -296,74 +309,11 @@ async def run_agent_loop(
         # Runs whether or not a reply is waiting: a pass with no reply still
         # produces a ListenResult (intent UNKNOWN), which keeps the timeline's
         # nine steps honest rather than leaving a gap that reads as a crash.
-        listen = await run_listen(case, pending_reply, supabase_client)
+        listen, final_status, close_reason = await _run_listen_stage(
+            supabase_client, case, customer, pending_reply, trace_id, merchant_id
+        )
         steps_completed.append(StepName.LISTEN)
-        await audit.log_listen(supabase_client, case_id, merchant_id, listen.model_dump(), trace_id)
-
-        # Mark the reply handled so a later pass cannot re-apply it.
-        if pending_reply and listen.reply_id:
-            try:
-                supabase_client.table("customer_replies").update(
-                    {
-                        "applied_state_update": listen.recommended_state_update or "processed",
-                        "updated_at": datetime.now(UTC).isoformat(),
-                    }
-                ).eq("id", listen.reply_id).execute()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("reply_update_error", error=str(exc))
-
         log.info("step_listen_complete", intent=listen.intent.value)
-
-        # ── APPLY LISTEN RESULT — state transitions ─────────────────────
-        final_status = CaseStatus.IN_FLIGHT
-        close_reason: str | None = None
-
-        if listen.opt_out_signal:
-            # Revoke consent across all channels — the S6 Sana scenario. This is
-            # the one side effect that leaves the case, because "do not contact
-            # me" is about the person and not about this invoice.
-            if customer:
-                try:
-                    updated_consent = {
-                        **(customer.get("consent") or {}),
-                        "whatsapp": False,
-                        "sms": False,
-                        "email": False,
-                        "marketing": False,
-                        "opted_out_at": datetime.now(UTC).isoformat(),
-                    }
-                    supabase_client.table("customers").update(
-                        {
-                            "consent": updated_consent,
-                            "updated_at": datetime.now(UTC).isoformat(),
-                        }
-                    ).eq("id", customer["id"]).execute()
-                    await audit.log_agent_step(
-                        supabase_client,
-                        case_id,
-                        merchant_id,
-                        "listen",
-                        "system",
-                        "consent_revoked",
-                        {
-                            "customer_id": customer["id"],
-                            "channels": ["whatsapp", "sms", "email"],
-                        },
-                        trace_id,
-                    )
-                    log.info("consent_revoked", customer_id=customer["id"])
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("consent_revoke_error", error=str(exc))
-            final_status = CaseStatus.STOPPED
-            close_reason = "Customer opted out — consent revoked across all channels"
-
-        elif listen.hardship_signal:
-            final_status = CaseStatus.STOPPED
-            close_reason = "Customer signalled hardship — recovery paused, human handoff triggered"
-
-        elif listen.churn_signal:
-            final_status = CaseStatus.STOPPED
-            close_reason = "Customer confirmed churn — recovery stopped, handoff to retention team"
 
         # ── STEP 8: LEARN ──────────────────────────────────────────────
         # PHASE 6 wires bandit reward updates; PHASE 9 uplift training data;
@@ -434,6 +384,118 @@ async def run_agent_loop(
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
+async def _run_listen_stage(
+    supabase_client: Any,
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    pending_reply: dict[str, Any] | None,
+    trace_id: str,
+    merchant_id: str,
+) -> tuple[ListenResult, CaseStatus, str | None]:
+    """Classify any pending reply, apply what it implies, and audit both.
+
+    Returns the classification, the status the case should now hold, and the
+    reason to close with (``None`` when the case stays in flight).
+
+    Consent revocation is the one side effect that leaves the case: it writes to
+    ``customers``, because "do not contact me" is about the person and not about
+    this invoice.
+    """
+    case_id = str(case["id"])
+    log = logger.bind(case_id=case_id, trace_id=trace_id)
+
+    listen = await run_listen(case, pending_reply, supabase_client)
+    await audit.log_listen(supabase_client, case_id, merchant_id, listen.model_dump(), trace_id)
+
+    # Mark the reply handled so a later pass cannot re-apply it.
+    if pending_reply and listen.reply_id:
+        try:
+            supabase_client.table("customer_replies").update(
+                {
+                    "applied_state_update": listen.recommended_state_update or "processed",
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            ).eq("id", listen.reply_id).execute()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("reply_update_error", error=str(exc))
+
+    if listen.opt_out_signal:
+        # Revoke consent across all channels — the S6 Sana scenario.
+        if customer:
+            try:
+                updated_consent = {
+                    **(customer.get("consent") or {}),
+                    "whatsapp": False,
+                    "sms": False,
+                    "email": False,
+                    "marketing": False,
+                    "opted_out_at": datetime.now(UTC).isoformat(),
+                }
+                supabase_client.table("customers").update(
+                    {"consent": updated_consent, "updated_at": datetime.now(UTC).isoformat()}
+                ).eq("id", customer["id"]).execute()
+                await audit.log_agent_step(
+                    supabase_client,
+                    case_id,
+                    merchant_id,
+                    "listen",
+                    "system",
+                    "consent_revoked",
+                    {"customer_id": customer["id"], "channels": ["whatsapp", "sms", "email"]},
+                    trace_id,
+                )
+                log.info("consent_revoked", customer_id=customer["id"])
+            except Exception as exc:  # noqa: BLE001
+                log.warning("consent_revoke_error", error=str(exc))
+        return listen, CaseStatus.STOPPED, (
+            "Customer opted out — consent revoked across all channels"
+        )
+
+    if listen.hardship_signal:
+        return listen, CaseStatus.STOPPED, (
+            "Customer signalled hardship — recovery paused, human handoff triggered"
+        )
+
+    if listen.churn_signal:
+        return listen, CaseStatus.STOPPED, (
+            "Customer confirmed churn — recovery stopped, handoff to retention team"
+        )
+
+    return listen, CaseStatus.IN_FLIGHT, None
+
+
+async def _hear_pending_reply(
+    supabase_client: Any,
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    pending_reply: dict[str, Any] | None,
+    trace_id: str,
+    merchant_id: str,
+    steps_completed: list[StepName],
+    *,
+    fallback_reason: str,
+) -> tuple[ListenResult | None, str]:
+    """Run the listen stage on an early exit, if a reply is waiting.
+
+    Listening is perception, not action. A pass that the uplift check or the
+    guardrail ends early is forbidden from *sending*, which is no reason to stop
+    *hearing* — and without this an inbound "STOP" arriving while the case is
+    inside its RBI retry-spacing window would never be honoured, because the
+    guardrail returns three steps before LISTEN.
+
+    A reason derived from the customer's own words outranks the machine's:
+    "customer opted out" is the truer account of why the case closed than
+    "guardrail blocked", so it wins when both are available.
+    """
+    if not pending_reply:
+        return None, fallback_reason
+
+    listen, _status, close_reason = await _run_listen_stage(
+        supabase_client, case, customer, pending_reply, trace_id, merchant_id
+    )
+    steps_completed.append(StepName.LISTEN)
+    return listen, close_reason or fallback_reason
+
 
 
 async def _get_or_create_case(

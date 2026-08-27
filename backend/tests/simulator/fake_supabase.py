@@ -131,6 +131,7 @@ class _Query:
         self._order: tuple[str, bool] | None = None
         self._embed: str | None = None
         self._count: str | None = None
+        self._range: tuple[int, int] | None = None
 
     # -- operations ---------------------------------------------------------
 
@@ -183,8 +184,17 @@ class _Query:
         self._filters.append(("is", column, value))
         return self
 
+    def like(self, column: str, pattern: str) -> _Query:
+        self._filters.append(("like", column, pattern))
+        return self
+
     def limit(self, count: int) -> _Query:
         self._limit = count
+        return self
+
+    def range(self, start: int, end: int) -> _Query:
+        # PostgREST's range is inclusive at both ends, like an HTTP Range header.
+        self._range = (start, end)
         return self
 
     def order(self, column: str, desc: bool = False, **_: Any) -> _Query:
@@ -208,6 +218,12 @@ class _Query:
                     if actual != _json_text(value):
                         return False
                 elif actual != value:
+                    return False
+            elif kind == "like":
+                # Only the trailing-% form the audit filter uses is supported;
+                # anything else would be a fake that lies about its coverage.
+                prefix = str(value).rstrip("%")
+                if actual is None or not str(actual).startswith(prefix):
                     return False
             elif kind == "neq":
                 if actual == value:
@@ -255,6 +271,9 @@ class _Query:
             matched = sorted(matched, key=lambda row: str(row.get(column) or ""), reverse=desc)
         if self._limit is not None:
             matched = matched[: self._limit]
+        if self._range is not None:
+            start, end = self._range
+            matched = matched[start : end + 1]
 
         total = len(matched) if self._count else None
         result = [dict(row) for row in matched]
