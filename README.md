@@ -1,5 +1,8 @@
 # Recover — AI Revenue Recovery Agent
 
+[![Typecheck](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/typecheck.yml/badge.svg)](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/typecheck.yml)
+[![Deploy](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/deploy.yml/badge.svg)](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/deploy.yml)
+
 Recover is a merchant-side agent for Razorpay sellers that watches for revenue
 slipping away — failed payments, abandoned checkouts, broken subscription
 mandates, overdue B2B invoices — diagnoses why each one happened, and works it
@@ -7,8 +10,9 @@ back. It decides with a contextual bandit, explains every step it took, honours
 every opt-out, and reports what it earned against a holdout group rather than
 against raw totals.
 
-This repository is at **Phase 1: Foundations** — schema, auth, API surface, and
-the UI shell. The agent itself arrives in Phase 4.
+This repository is at **Phase 3: Deployment** — schema, auth, API surface, the
+UI shell, the scenario simulator, and a CI/CD pipeline onto Azure Container
+Apps. The agent itself arrives in Phase 4.
 
 ## Quick start
 
@@ -138,8 +142,11 @@ Two things are worth knowing about this shape:
 │   └── seed.sql                 unused: fixtures are per-merchant, so the
 │                                simulator creates them at runtime
 │
+├── infra/                       Azure — Bicep template and setup scripts
+│
 ├── docker-compose.yml           production-shaped stack
-└── docker-compose.override.yml  backend hot reload, loaded automatically
+├── docker-compose.override.yml  backend hot reload, loaded automatically
+└── docker-compose.prod.yml      the real production images, run locally
 ```
 
 ## Checks
@@ -179,6 +186,37 @@ Two things worth knowing:
 - Every payload matches `scenarios.md` exactly, and
   `tests/simulator/test_payload_fidelity.py` reads that document to prove it. If
   the script changes and the generator does not, the build fails.
+
+## Deployment
+
+Both apps run on **Azure Container Apps**. Pushing to `main` builds each image,
+pushes it to Azure Container Registry tagged with the commit SHA, points the
+Container Apps at it, and verifies both are serving.
+
+Setup, cost, teardown, logs, and the things that commonly go wrong are all in
+[`infra/README.md`](./infra/README.md). The short version:
+
+```bash
+az login
+# fill in the two public Supabase values in infra/main.parameters.json first
+bash infra/setup-azure.sh recover-aa centralindia prod
+bash infra/setup-github-secrets.sh
+```
+
+**Live URLs** — filled in after the first deployment; `setup-azure.sh` prints
+both, and they are also on each Container App's overview page in the portal.
+
+| | |
+| --- | --- |
+| Frontend | `https://<prefix>-prod-frontend.<region>.azurecontainerapps.io` |
+| Backend | `https://<prefix>-prod-backend.<region>.azurecontainerapps.io` |
+
+To run the production images locally before pushing — same Dockerfiles, same
+build args, no Azure involved:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
 
 ## Phases
 
