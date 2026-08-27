@@ -34,6 +34,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from app.agent.guardrail import MESSAGE_ACTIONS
 from app.agent.llm import make_gemini_client
 from app.agent.models import ActionType, ExecutionResult, ExecutionStatus
 from app.agent.prompts.message_prompt import (
@@ -45,11 +46,10 @@ from app.logging import get_logger
 
 logger = get_logger(__name__)
 
-#: Actions whose payload carries copy a human being will read. Only these get a
-#: generated message; a silent retry or a mandate re-registration has no body.
-_MESSAGE_ACTIONS: frozenset[str] = frozenset(
-    {"send_whatsapp", "send_sms", "send_email", "send_payment_link"}
-)
+# The set of actions that put words in front of a customer is the guardrail's,
+# reused rather than restated. They must not drift: an action TRAI governs but
+# that generates no copy would be sent with an empty body, and one that
+# generates copy without being governed would skip the consent check.
 
 #: LTV boundaries in paise, for the one context feature the prompt takes as a
 #: bucket rather than a number. A model handed "2700000" reasons about the digits;
@@ -123,7 +123,7 @@ async def run_execute(
             decision.get("action_params") or {},
             supabase_client,
         )
-        if action_type in _MESSAGE_ACTIONS
+        if action_type in MESSAGE_ACTIONS
         else None
     )
 
