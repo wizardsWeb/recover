@@ -9,12 +9,14 @@
  * below mirror the database columns exactly, which is also what makes them easy
  * to check against the migration.
  *
- * The read functions run on the server (`serverRequest`); `overrideCase` is a
- * user action and runs in the browser (`request`).
+ * This module is **browser-safe**: it holds the types and the one action a user
+ * takes (`overrideCase`). The read functions live in `cases.server.ts`, because
+ * they reach for the session through `next/headers` and importing that from a
+ * client component fails the build. Splitting on that boundary is what keeps
+ * `CaseActions` — a client component that needs these types — importable.
  */
 
 import { request } from "@/lib/api/client";
-import { serverRequest } from "@/lib/api/server";
 
 export type CaseStatus =
   | "open"
@@ -130,28 +132,6 @@ export interface CaseFilters {
   playbook?: string;
   limit?: number;
   offset?: number;
-}
-
-export function getCases(filters: CaseFilters = {}): Promise<{ cases: CaseListItem[] }> {
-  const params = new URLSearchParams();
-  if (filters.status) params.set("status", filters.status);
-  if (filters.playbook) params.set("playbook", filters.playbook);
-  if (filters.limit) params.set("limit", String(filters.limit));
-  if (filters.offset) params.set("offset", String(filters.offset));
-  const query = params.toString();
-  return serverRequest<{ cases: CaseListItem[] }>(`/api/cases${query ? `?${query}` : ""}`);
-}
-
-export function getCase(id: string): Promise<CaseDetail> {
-  return serverRequest<CaseDetail>(`/api/cases/${id}`);
-}
-
-export function getAuditEvents(limit = 100): Promise<{ audit_events: AuditEvent[] }> {
-  return serverRequest<{ audit_events: AuditEvent[] }>(`/api/audit?limit=${limit}`);
-}
-
-export function getOverview(): Promise<Overview> {
-  return serverRequest<Overview>("/api/analytics/overview");
 }
 
 /** Take a case away from the agent. Runs in the browser — it is a user action. */

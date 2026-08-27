@@ -6,7 +6,8 @@ import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { FirstTimeDashboard } from "@/components/empty-states/FirstTimeDashboard";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCases, getOverview, type CaseListItem, type Overview } from "@/lib/api/cases";
+import type { CaseListItem, Overview } from "@/lib/api/cases";
+import { getCases, getOverview } from "@/lib/api/cases.server";
 import { formatINR, formatPercent } from "@/lib/utils/format";
 
 export const metadata: Metadata = { title: "Dashboard" };

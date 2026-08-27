@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 
 import { AuditLogEntry } from "@/components/domain/AuditLogEntry";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { getAuditEvents, type AuditEvent } from "@/lib/api/cases";
+import type { AuditEvent } from "@/lib/api/cases";
+import { getAuditEvents } from "@/lib/api/cases.server";
 
 export const metadata: Metadata = { title: "Audit" };
 
