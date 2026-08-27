@@ -226,8 +226,18 @@ async def run_agent_loop(
         log.info("step_uplift_complete", verdict=uplift.verdict)
 
         # ── STEP 4: DECIDE ─────────────────────────────────────────────
-        # PHASE 6 replaces the rule-based default arm with a contextual bandit.
-        decision = await run_decide(case, diagnosis.model_dump(), playbook)
+        # A Thompson Sampling bandit draws the arm; the playbook's conservative
+        # default answers only if that path raises. The customer and event go in
+        # because the context bucket is built from them — bank, method, the hour
+        # in IST, and the LTV band.
+        decision = await run_decide(
+            case,
+            diagnosis.model_dump(),
+            playbook,
+            supabase_client,
+            customer=customer,
+            event=event,
+        )
         steps_completed.append(StepName.DECIDE)
         decision_row = await _write_agent_decision(
             supabase_client, case_id, merchant_id, trace_id, decision, diagnosis, uplift
@@ -736,6 +746,10 @@ async def _write_agent_decision(
         "bandit_alternatives": [
             alt.model_dump(mode="json") for alt in decision.alternatives_considered
         ],
+        # The reward posted when this case closes is credited to the posterior
+        # named by this vector, not to one recomputed later — see
+        # `app.agent.bandit.reward`.
+        "bandit_context_vector": decision.bandit_context_vector,
         "causal_path": diagnosis.causal_path,
         "chosen_action": decision.chosen_arm,
         "action_params": decision.action_params,

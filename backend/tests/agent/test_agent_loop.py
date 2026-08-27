@@ -12,7 +12,8 @@ import pytest
 
 from app.agent import guardrail as guardrail_module
 from app.agent.core import process_event, run_agent_loop
-from app.agent.models import CaseStatus, StepName
+from app.agent.models import CaseStatus, DecisionSource, StepName
+from app.agent.playbooks import CHECKOUT_ABANDONMENT_CONFIG
 from tests.agent.conftest import (
     BUSINESS_HOURS_IST,
     MERCHANT_ID,
@@ -30,6 +31,11 @@ TRACE_ID = "trace0000000000000000000000000001"
 
 def rows_for(db: FakeSupabase, table: str, case_id: str) -> list[dict[str, Any]]:
     return [row for row in db.rows(table) if row.get("case_id") == case_id]
+
+
+@pytest.fixture(autouse=True)
+def _pin_bandit(deterministic_bandit: None) -> None:
+    """Every test in this module asserts on loop structure, not on arm sampling."""
 
 
 async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
@@ -59,10 +65,22 @@ async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
     assert result.final_status is CaseStatus.IN_FLIGHT
     assert result.guardrail is not None and result.guardrail.verdict == "PASS"
 
-    # The stub decision must be the conservative arm — never one that discounts.
+    # The bandit decided, and said so. With no posteriors seeded every arm is at
+    # its flat prior, so this asserts the shape of a bandit decision rather than
+    # a particular winner — which arm a tie resolves to is not a property worth
+    # freezing.
     assert result.decision is not None
-    assert result.decision.chosen_arm == "whatsapp_saved_cart_no_discount"
-    assert result.decision.action_params["discount_pct"] == 0
+    assert result.decision.decision_source is DecisionSource.BANDIT
+    assert result.decision.is_stub is False
+    assert result.decision.chosen_arm in CHECKOUT_ABANDONMENT_CONFIG.arms
+    assert result.decision.bandit_mode in ("exploit", "explore")
+    # Every arm is ranked, not just the winner — the counterfactual is what
+    # makes the decision explainable.
+    assert len(result.decision.alternatives_considered) == len(CHECKOUT_ABANDONMENT_CONFIG.arms)
+    assert sum(alt.chosen for alt in result.decision.alternatives_considered) == 1
+    # The context the arm was drawn under is carried on the result, because the
+    # reward has to be credited back to this exact bucket.
+    assert result.decision.bandit_context_vector["ltv_bucket"] == "low"
 
     # Every step that produces a fact wrote one audit row.
     assert audit_events(db, case["id"]) == [
@@ -87,9 +105,12 @@ async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
     # step_number is the decide step's position in the nine-step loop, not the
     # Nth decision on this case.
     assert decisions[0]["step_number"] == 4
-    assert decisions[0]["decision_source"] == "rule"
+    assert decisions[0]["decision_source"] == "bandit"
     # The counterfactual is recorded, not just the winner.
     assert len(decisions[0]["bandit_alternatives"]) == 8
+    # And the context bucket the draw came from, so the reward posted when this
+    # case closes lands on the same posterior.
+    assert decisions[0]["bandit_context_vector"]["ltv_bucket"] == "low"
 
     stored_case = db.find_one("recovery_cases", case["id"])
     assert stored_case is not None
