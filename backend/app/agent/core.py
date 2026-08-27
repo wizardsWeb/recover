@@ -221,6 +221,7 @@ async def run_agent_loop(
                 supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
             )
             steps_completed.append(StepName.AUDIT)
+            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
@@ -299,6 +300,7 @@ async def run_agent_loop(
                 supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
             )
             steps_completed.append(StepName.AUDIT)
+            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
@@ -345,12 +347,7 @@ async def run_agent_loop(
                     merchant_id,
                 )
                 steps_completed.append(StepName.AUDIT)
-                await post_reward(
-                    supabase_client,
-                    {**case, "status": early_status.value, "amount_recovered_cents": 0},
-                    early_status.value,
-                    trace_id,
-                )
+                await _post_close_reward(supabase_client, case, early_status, trace_id)
                 return AgentLoopResult(
                     case_id=case_id,
                     trace_id=trace_id,
@@ -456,20 +453,7 @@ async def run_agent_loop(
         # then: rewarding a case still in flight would credit an arm for an
         # outcome that has not happened.
         if final_status in _TERMINAL_STATUSES:
-            await post_reward(
-                supabase_client,
-                {
-                    **case,
-                    "status": final_status.value,
-                    "amount_recovered_cents": (
-                        int(case.get("amount_at_risk_cents") or 0)
-                        if final_status is CaseStatus.RECOVERED
-                        else 0
-                    ),
-                },
-                final_status.value,
-                trace_id,
-            )
+            await _post_close_reward(supabase_client, case, final_status, trace_id)
 
         _mark_event_processed(supabase_client, event)
 
@@ -819,6 +803,33 @@ def _update_case(supabase_client: Any, case_id: str, changes: dict[str, Any]) ->
         ).eq("id", case_id).execute()
     except Exception as exc:  # noqa: BLE001
         logger.warning("case_update_error", case_id=case_id, error=str(exc))
+
+
+async def _post_close_reward(
+    supabase_client: Any,
+    case: dict[str, Any],
+    final_status: CaseStatus,
+    trace_id: str,
+) -> None:
+    """Hand a closed case's outcome to the bandit.
+
+    Called from every path that closes a case — the uplift skip, the guardrail
+    block, the reply that ends it, and the normal end of a pass. Which of those
+    happened does not change the reward; what changes it is whether the money
+    came back.
+
+    ``post_reward`` itself declines cases that never reached an adapter, so the
+    two early exits are safe to call even though nothing was sent on them.
+    """
+    recovered = (
+        int(case.get("amount_at_risk_cents") or 0) if final_status is CaseStatus.RECOVERED else 0
+    )
+    await post_reward(
+        supabase_client,
+        {**case, "status": final_status.value, "amount_recovered_cents": recovered},
+        final_status.value,
+        trace_id,
+    )
 
 
 def mark_case_recovered(

@@ -249,6 +249,13 @@ _DEMO_PRIORS: list[dict[str, Any]] = [
             "polite_reminder_whatsapp": (8, 10),
             "escalate_to_human_ar": (8, 12),
             "accept_promise_to_pay": (6, 6),
+            # Not in the Phase 6 spec's list, which seeds 8 of this playbook's 9
+            # arms. One arm left at the flat prior is not a small omission: an
+            # untried arm out-draws a well-evidenced one often enough that S4
+            # would pick it on a noticeable fraction of demo runs, for no reason
+            # a viewer could see. A middling prior keeps it a real option
+            # without letting it win on noise alone.
+            "payment_plan_offer": (9, 9),
             "polite_reminder_email": (5, 10),
         },
     },
@@ -296,6 +303,31 @@ _DEMO_PRIORS: list[dict[str, Any]] = [
 ]
 
 
+#: The time-of-day bands `context.make_context_bucket` can produce.
+_PERIODS = ("morning", "afternoon", "evening", "night")
+
+
+def _prior_context_buckets(entry: dict[str, Any]) -> list[str]:
+    """Every bucket this scenario could be looked up under.
+
+    Usually one. The exception is an event whose payload carries no timestamp of
+    its own — ``invoice.overdue`` has ``due_date`` and ``days_overdue`` but
+    nothing saying when anything was *attempted*, because nothing was. At
+    runtime the period then falls back to ``events.received_at``, which is
+    whenever the scenario happened to be fired, so a single seeded period would
+    match only if the demo ran in that four-hour window. Those entries are
+    seeded across all four bands.
+
+    Costs 24 extra rows and removes a class of "works in the morning, breaks in
+    the afternoon" failure that is close to impossible to diagnose from the UI —
+    the arm just looks wrong, with no indication the priors were never found.
+    """
+    bucket = _prior_context_bucket(entry)
+    if ":unknown:" not in bucket:
+        return [bucket]
+    return [bucket] + [bucket.replace(":unknown:", f":{period}:") for period in _PERIODS]
+
+
 def _prior_context_bucket(entry: dict[str, Any]) -> str:
     """The bucket the agent will compute for this scenario, computed the same way."""
     persona = entry["persona"]
@@ -328,24 +360,25 @@ async def seed_bandit_priors(supabase_client: Any, merchant_id: str) -> dict[str
 
     for entry in _DEMO_PRIORS:
         playbook = str(entry["playbook"])
-        bucket = _prior_context_bucket(entry)
-        buckets[f"{playbook}:{entry['persona']['external_id']}"] = bucket
+        entry_buckets = _prior_context_buckets(entry)
+        buckets[f"{playbook}:{entry['persona']['external_id']}"] = ",".join(entry_buckets)
 
-        for arm_name, (alpha, beta) in entry["arms"].items():
-            write_posterior(
-                supabase_client,
-                merchant_id,
-                playbook,
-                arm_name,
-                bucket,
-                alpha=float(alpha),
-                beta=float(beta),
-                # Every prior observation was a pull. Without this the arms
-                # would read as untried in the UI while carrying a confident
-                # posterior, which is the one combination that is never true.
-                n_pulls=int(alpha) + int(beta) - 2,
-            )
-            rows += 1
+        for bucket in entry_buckets:
+            for arm_name, (alpha, beta) in entry["arms"].items():
+                write_posterior(
+                    supabase_client,
+                    merchant_id,
+                    playbook,
+                    arm_name,
+                    bucket,
+                    alpha=float(alpha),
+                    beta=float(beta),
+                    # Every prior observation was a pull. Without this the arms
+                    # would read as untried in the UI while carrying a confident
+                    # posterior, which is the one combination that is never true.
+                    n_pulls=int(alpha) + int(beta) - 2,
+                )
+                rows += 1
 
     log.info("simulator.bandit_priors_seeded", merchant_id=merchant_id, rows=rows, **buckets)
     return {"rows": rows, "buckets": buckets}
