@@ -207,6 +207,9 @@ class ReplyIntent(StrEnum):
     CHURN_CONFIRMATION = "churn_confirmation"
     HARDSHIP_SIGNAL = "hardship_signal"
     SOFT_PROMISE = "soft_promise"
+    # "the app charged me twice", "goods came damaged" — a recovery message is
+    # the wrong answer to a complaint, so the classifier gets a name for it.
+    PRODUCT_ISSUE = "product_issue"
     NEUTRAL = "neutral"
     UNKNOWN = "unknown"
 
@@ -229,7 +232,12 @@ class ListenResult(BaseModel):
     churn_signal: bool
     extracted_entities: dict[str, Any] = Field(default_factory=dict)
     recommended_state_update: str | None = None
-    is_stub: bool = True  # False once LLM classification wired in Phase 5
+    # Both are LLM-only. The pattern matcher cannot read tone, and it has no
+    # calibrated notion of confidence — leaving them None is the honest answer
+    # rather than inventing a 1.0 for a keyword hit.
+    sentiment: str | None = None
+    confidence: float | None = None
+    is_stub: bool = True  # False when the Gemini classifier answered
 
 
 class AgentLoopResult(BaseModel):
