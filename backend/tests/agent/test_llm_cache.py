@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+import app.agent.llm as llm_module
 from app.agent.llm import GeminiClient, prompt_hash
 from tests.simulator.fake_supabase import FakeSupabase
 
@@ -220,3 +221,47 @@ async def test_the_api_key_travels_in_a_header_not_the_url(
     call = _FakeAsyncClient.calls[0]
     assert "test-key" not in call["url"]
     assert call["headers"]["x-goog-api-key"] == "test-key"
+
+
+async def test_a_transient_5xx_is_retried_then_falls_back(
+    db: FakeSupabase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bad moment at Google's end is worth a second try; a persistent one is not."""
+    import httpx
+
+    class _ServerErrorClient(_FakeAsyncClient):
+        async def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+            type(self).calls.append({"url": url})
+            raise httpx.HTTPStatusError(
+                "503",
+                request=httpx.Request("POST", url),
+                response=httpx.Response(503, request=httpx.Request("POST", url)),
+            )
+
+    monkeypatch.setattr("app.agent.llm.httpx.AsyncClient", _ServerErrorClient)
+
+    result = await _client(db).generate_structured("anything", SCHEMA, "t", FALLBACK)
+
+    assert result is FALLBACK
+    assert len(_ServerErrorClient.calls) == llm_module._MAX_ATTEMPTS
+
+
+async def test_a_4xx_is_not_retried(db: FakeSupabase, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bad schema or a bad key fails identically every time — retrying only stalls."""
+    import httpx
+
+    class _BadRequestClient(_FakeAsyncClient):
+        async def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+            type(self).calls.append({"url": url})
+            raise httpx.HTTPStatusError(
+                "400",
+                request=httpx.Request("POST", url),
+                response=httpx.Response(400, request=httpx.Request("POST", url)),
+            )
+
+    monkeypatch.setattr("app.agent.llm.httpx.AsyncClient", _BadRequestClient)
+
+    result = await _client(db).generate_structured("anything", SCHEMA, "t", FALLBACK)
+
+    assert result is FALLBACK
+    assert len(_BadRequestClient.calls) == 1

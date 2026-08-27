@@ -51,6 +51,12 @@ import time
 from typing import Any
 
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.logging import get_logger
 
@@ -70,6 +76,12 @@ DEFAULT_RATE_LIMIT_PER_MIN = 12
 
 #: One Gemini call should never hold a background task longer than this.
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+#: Retries for one Gemini call, including the first attempt. Three is chosen
+#: against the demo, not against a throughput target: two extra tries add at most
+#: ~3s of backoff, and a step that stalls longer than that is worse on camera
+#: than a step that falls back.
+_MAX_ATTEMPTS = 3
 
 #: ``llm_cache.prompt_preview`` is documented as "first 200 chars, for debugging only".
 _PREVIEW_CHARS = 200
@@ -108,6 +120,25 @@ redis.call('HMSET', KEYS[1], 'tokens', tokens, 'updated_at', now)
 redis.call('EXPIRE', KEYS[1], 120)
 return allowed
 """
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """Whether a failed Gemini call is worth trying again.
+
+    Timeouts, connection errors and 5xx are the server having a bad moment —
+    those retry. A 400 (bad schema) and a 403 (bad key) are ours and will fail
+    identically every time, so retrying them only delays the fallback.
+
+    **429 is deliberately not retried.** The free tier's quota does not refill
+    inside a backoff window, and hammering it is how a rate-limited demo becomes
+    a rate-limited demo with three times the requests. The token bucket in front
+    of this is what is supposed to prevent 429 in the first place.
+    """
+    if isinstance(exc, httpx.TimeoutException | httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return False
 
 
 def prompt_hash(schema_name: str, prompt: str) -> str:
@@ -316,6 +347,14 @@ class GeminiClient:
 
     # ── the call itself ────────────────────────────────────────────────
 
+    @retry(
+        stop=stop_after_attempt(_MAX_ATTEMPTS),
+        wait=wait_exponential(multiplier=0.5, max=2),
+        retry=retry_if_exception(_is_transient),
+        # Re-raise the underlying error rather than tenacity's RetryError, so the
+        # warning `generate_structured` logs names the actual failure.
+        reraise=True,
+    )
     async def _call_gemini(
         self,
         prompt: str,
@@ -323,8 +362,9 @@ class GeminiClient:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """POST to ``generateContent`` and parse the JSON body out of the candidate.
 
-        Raises on anything unexpected; ``generate_structured`` is the only caller
-        and it turns every exception into the fallback.
+        Retries transient server-side failures; see :func:`_is_transient`. Raises
+        on anything else, and ``generate_structured`` — the only caller — turns
+        every exception into the fallback.
         """
         url = f"{GEMINI_API_BASE}/{self._model}:generateContent"
         body = {
