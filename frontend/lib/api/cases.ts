@@ -58,9 +58,15 @@ export interface AuditEvent {
 
 export interface BanditAlternative {
   arm_name: string;
+  /** The arm's posterior mean — what the agent believes, not the draw it got. */
   expected_reward: number;
   chosen: boolean;
   not_chosen_reason: string | null;
+  /** The Thompson draw this round. Null on a rule-based fallback decision. */
+  sampled_theta?: number | null;
+  n_pulls?: number | null;
+  /** True when the arm carries prior only — never tried in this context. */
+  is_cold?: boolean | null;
 }
 
 export interface AgentDecision {
@@ -72,6 +78,8 @@ export interface AgentDecision {
   bandit_arm_confidence: number | null;
   bandit_mode: "exploit" | "explore" | null;
   bandit_alternatives: BanditAlternative[] | null;
+  /** Features the arm was drawn under; the context bucket is built from these. */
+  bandit_context_vector: Record<string, unknown> | null;
   chosen_action: string | null;
   action_params: Record<string, unknown> | null;
   reasoning: string | null;

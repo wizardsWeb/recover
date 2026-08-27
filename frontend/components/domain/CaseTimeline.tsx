@@ -14,8 +14,15 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
-import type { AuditEvent, CaseDetail, CustomerReply, ExecutionAttempt } from "@/lib/api/cases";
+import type {
+  AgentDecision,
+  AuditEvent,
+  CaseDetail,
+  CustomerReply,
+  ExecutionAttempt,
+} from "@/lib/api/cases";
 
 /**
  * The agent's reasoning, in the order it happened.
@@ -164,6 +171,66 @@ function ProvenanceBadge({ isStub }: { isStub: boolean }) {
     <span className="inline-flex items-center gap-1 rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand">
       <Sparkles size={9} />
       AI-diagnosed
+    </span>
+  );
+}
+
+/**
+ * Rebuild the context bucket the bandit stored its posteriors under.
+ *
+ * Mirrors `make_context_bucket` in `app/agent/bandit/context.py`. Reconstructed
+ * here rather than sent as its own column because the vector is the durable
+ * record and the bucket is a pure function of four of its fields — storing both
+ * would let them disagree.
+ */
+function buildContextBucket(vector: Record<string, unknown> | null): string | null {
+  if (!vector) return null;
+  const part = (key: string, fallback: string) => String(vector[key] ?? fallback);
+  return [
+    part("bank", "OTHE"),
+    part("method", "OTH"),
+    part("period", "unknown"),
+    part("ltv_bucket", "low"),
+  ].join(":");
+}
+
+/**
+ * Who chose the action, in the collapsed header.
+ *
+ * A rule fallback and a bandit draw are different claims about how much the
+ * agent knows, and the analytics compare them directly — so the timeline says
+ * which one happened rather than leaving it to the expanded JSON.
+ */
+function DecideBadge({
+  decision,
+  contextBucket,
+}: {
+  decision: AgentDecision;
+  contextBucket: string | null;
+}) {
+  const isBandit = decision.decision_source === "bandit";
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {isBandit ? (
+        <span
+          className={`rounded-4xl px-2 py-0.5 text-[10px] font-medium ${
+            decision.bandit_mode === "explore"
+              ? "bg-info-subtle text-info"
+              : "bg-brand-subtle text-brand"
+          }`}
+        >
+          {decision.bandit_mode === "explore" ? "Explore" : "Exploit"}
+        </span>
+      ) : (
+        <span className="rounded-4xl bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
+          Rule fallback
+        </span>
+      )}
+      {contextBucket ? (
+        <span className="hidden truncate font-mono text-[10px] text-ink-faint sm:inline">
+          {contextBucket}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -368,6 +435,12 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
   // The richer payloads the audit summaries omit. Each is the most recent one,
   // because the timeline collapses repeated steps onto their final outcome.
   const diagnosis = caseDetail.diagnosis;
+  // The decide row carries the full arm ranking and the context vector; the
+  // audit summary carries neither. Newest first — a case worked over several
+  // passes has several decide rows, and the timeline shows the latest outcome.
+  const decideRow: AgentDecision | null =
+    [...caseDetail.agent_decisions].reverse().find((d) => d.step_name === "decide") ?? null;
+  const contextBucket = decideRow ? buildContextBucket(decideRow.bandit_context_vector) : null;
   const messageAttempt =
     [...caseDetail.execution_attempts]
       .reverse()
@@ -398,10 +471,12 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
         const checks = outcome.details?.checks as GuardrailCheck[] | undefined;
         const isLast = index === stepsToShow.length - 1;
 
-        const badge =
-          stepName === "diagnose" && outcome.details ? (
-            <ProvenanceBadge isStub={outcome.details.is_stub !== false} />
-          ) : null;
+        let badge: ReactNode = null;
+        if (stepName === "diagnose" && outcome.details) {
+          badge = <ProvenanceBadge isStub={outcome.details.is_stub !== false} />;
+        } else if (stepName === "decide" && decideRow) {
+          badge = <DecideBadge decision={decideRow} contextBucket={contextBucket} />;
+        }
 
         return (
           <div key={stepName} className="flex gap-3">
@@ -424,6 +499,14 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
               >
                 {stepName === "diagnose" && diagnosis ? (
                   <DiagnoseDetail diagnosis={diagnosis} />
+                ) : null}
+
+                {stepName === "decide" && decideRow?.bandit_alternatives ? (
+                  <BanditAlternativesFan
+                    alternatives={decideRow.bandit_alternatives}
+                    banditMode={decideRow.bandit_mode}
+                    contextBucket={contextBucket}
+                  />
                 ) : null}
 
                 {stepName === "guardrail" && checks ? (
