@@ -61,9 +61,7 @@ def seed_case(
     )
 
 
-def test_list_cases_returns_only_this_merchants_cases(
-    client: TestClient, db: FakeSupabase
-) -> None:
+def test_list_cases_returns_only_this_merchants_cases(client: TestClient, db: FakeSupabase) -> None:
     mine = seed_case(db)
     seed_case(db, merchant_id=OTHER_MERCHANT_ID)
 
@@ -165,9 +163,7 @@ def test_override_rejects_an_unknown_action(client: TestClient, db: FakeSupabase
     assert response.status_code == 422
 
 
-def test_audit_list_filters_by_case_and_event_prefix(
-    client: TestClient, db: FakeSupabase
-) -> None:
+def test_audit_list_filters_by_case_and_event_prefix(client: TestClient, db: FakeSupabase) -> None:
     case = seed_case(db)
     for event in ("detect:case_opened", "guardrail:guardrail_block", "execute:attempted"):
         db.insert_row(
