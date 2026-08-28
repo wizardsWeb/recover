@@ -20,6 +20,12 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       ? requested
       : "/app";
 
+  // Set by `/auth/callback` when a confirmation or recovery link could not be
+  // redeemed — most often an expired one, or one already used, since Supabase
+  // codes are single-use. Rendering it is what turns "I clicked the link and
+  // I am still signed out" into something the reader can act on.
+  const error = typeof params.error === "string" ? params.error : null;
+
   return (
     <AuthCard
       title="Sign in"
@@ -33,6 +39,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </>
       }
     >
+      {error ? (
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-danger/30 bg-danger-subtle px-3 py-2 text-xs leading-relaxed text-danger"
+        >
+          {error}
+        </p>
+      ) : null}
       <LoginForm next={next} />
     </AuthCard>
   );

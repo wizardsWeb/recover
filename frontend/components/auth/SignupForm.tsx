@@ -27,10 +27,23 @@ export function SignupForm() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      // Lands in raw_user_meta_data, which the on_auth_user_created trigger
-      // reads to name the merchant row it creates. Onboarding can then
-      // pre-fill instead of asking twice.
-      options: trimmed ? { data: { name: trimmed } } : undefined,
+      options: {
+        // Where the confirmation email points. Sent explicitly rather than
+        // left to the project's Site URL: that setting is a single global
+        // value, so without this every environment's confirmation link goes
+        // wherever the dashboard happens to point — which is how a deployed
+        // sign-up ends up mailing people a localhost link.
+        //
+        // `window.location.origin` rather than NEXT_PUBLIC_APP_URL, because it
+        // is right by construction on localhost, on the deployed host, and on
+        // any preview build, with no env var to keep in step. The URL still
+        // has to be on the project's Redirect URLs allow-list.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        // Lands in raw_user_meta_data, which the on_auth_user_created trigger
+        // reads to name the merchant row it creates. Onboarding can then
+        // pre-fill instead of asking twice.
+        ...(trimmed ? { data: { name: trimmed } } : {}),
+      },
     });
 
     if (error) {
