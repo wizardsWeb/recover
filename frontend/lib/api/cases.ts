@@ -153,3 +153,21 @@ export function overrideCase(
     body: JSON.stringify({ action, reason }),
   });
 }
+
+/**
+ * Write a handoff briefing for a case a human is taking over.
+ *
+ * Paired with `overrideCase` on escalation rather than folded into it: the
+ * override changes what the agent does, this produces what the person reads,
+ * and a case that moves to a human queue with no briefing is a case nobody
+ * knows why they have.
+ */
+export function createHandoff(
+  id: string,
+  reason: string,
+): Promise<{ case_id: string; trace_id: string }> {
+  return request(`/api/cases/${id}/handoff`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
