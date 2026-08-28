@@ -385,3 +385,63 @@ async def test_a_seeded_run_does_not_re_seed_the_rest_of_the_process() -> None:
     await run_batch(None, MERCHANT, n_cases=100, seed=7, persist_cases=False)
 
     assert [random.random() for _ in range(3)] == expected
+
+
+# ── The compliance summary ─────────────────────────────────────────────
+
+
+async def test_the_summary_separates_what_was_blocked_from_what_escaped() -> None:
+    """Two numbers that a single "violations" field would collapse.
+
+    Blocks are the guardrail working and are expected to be non-zero.
+    Violations are sends that got past it, which cannot happen because the check
+    runs first. Reporting one field would either hide the enforcement or
+    misreport it as a fault rate.
+    """
+    result = await run_batch(None, MERCHANT, n_cases=1000, seed=4, persist_cases=False)
+    summary = result.compliance_summary
+
+    assert summary.rbi_violations == 0
+    assert summary.trai_violations == 0
+    assert summary.trai_blocks > 0
+    assert summary.opt_outs_honored > 0
+
+
+async def test_quiet_hours_only_block_messages_not_retries() -> None:
+    """TRAI governs contacting a person. A silent retry is not contact, and
+    blocking it at 11pm would forgo recoveries the rule never prohibited."""
+    import random
+
+    rng = random.Random(3)
+    world = module._draw_world(rng, "failed_payment")
+    world.opted_out = False
+    world.retries_exhausted = False
+    world.context["hour_ist"] = 23
+
+    assert module._guardrail_block(world, "whatsapp_payment_link") == "trai_quiet_hours"
+    assert module._guardrail_block(world, "silent_retry_next_morning") is None
+
+
+async def test_the_rbi_ceiling_only_applies_where_the_playbook_has_one() -> None:
+    """`checkout_abandonment` has no mandate to retry against, so a retry arm
+    there must not be blocked by a rule that does not govern it."""
+    import random
+
+    rng = random.Random(3)
+    for playbook, expected in (
+        ("subscription_failure", "rbi_mandate_retry_count"),
+        ("checkout_abandonment", None),
+    ):
+        world = module._draw_world(rng, playbook)
+        world.opted_out = False
+        world.retries_exhausted = True
+        world.context["hour_ist"] = 10
+        assert module._guardrail_block(world, "retry_now") == expected
+
+
+async def test_human_handoffs_are_counted_because_they_are_what_cost_money() -> None:
+    """The expensive arm. It is the reason cost-per-₹100 is on the screen."""
+    result = await run_batch(None, MERCHANT, n_cases=1000, seed=4, persist_cases=False)
+
+    assert result.human_handoffs > 0
+    assert result.compliance_summary.human_handoffs == result.human_handoffs
