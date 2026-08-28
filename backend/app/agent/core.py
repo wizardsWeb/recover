@@ -224,11 +224,22 @@ async def run_agent_loop(
             )
 
         # ── STEP 2: DIAGNOSE ───────────────────────────────────────────
-        # Gemini extracts the root cause; the playbook stub answers if it can't.
-        # The event and the customer row go in because the evidence lives there —
-        # the failure code on the payload, the recovery history on the customer.
+        # A causal graph reaches the conclusion; Gemini writes it up. The event
+        # and the customer row go in because the evidence lives there — the
+        # failure code on the payload, the recovery history on the customer.
+        #
+        # Whether the bank is currently degraded across the network is the one
+        # observable that needs a query, so it is established here and handed
+        # down. That keeps the graph traversal synchronous and free of I/O, and
+        # it is why the lookup returning None matters: "we could not check"
+        # leaves the node unobserved rather than asserting the bank is healthy.
         diagnosis = await run_diagnose(
-            case, playbook, supabase_client, event=event, customer=customer
+            case,
+            playbook,
+            supabase_client,
+            event=event,
+            customer=customer,
+            network_degraded=_network_degraded(supabase_client, case),
         )
         steps_completed.append(StepName.DIAGNOSE)
         await audit.log_diagnosis(
@@ -1084,6 +1095,39 @@ def mark_case_recovered(
         amount_cents=amount_at_risk_cents,
         trace_id=trace_id,
     )
+
+
+def _network_degraded(supabase_client: Any, case: dict[str, Any]) -> bool | None:
+    """Whether this case's instrument has an open network alert.
+
+    None on any failure, and None is load-bearing: it leaves the observable
+    unobserved, where False would assert the rail is healthy on the strength of
+    a query that did not run. The same table the guardrail blocks on, read the
+    same way — `bank.upper()` and `method.lower()`, because an alert stored in
+    any other case matches nothing.
+    """
+    if supabase_client is None:
+        return None
+    metadata = case.get("metadata") or {}
+    bank = str(metadata.get("bank") or "").strip()
+    method = str(metadata.get("method") or "").strip()
+    if not bank or not method:
+        return None
+
+    try:
+        resp = (
+            supabase_client.table("network_alerts")
+            .select("id")
+            .eq("affected_bank", bank.upper())
+            .eq("affected_method", method.lower())
+            .is_("resolved_at", "null")
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable network view is not a diagnosis failure
+        logger.warning("network_alert_lookup_failed", error=str(exc))
+        return None
+    return bool(getattr(resp, "data", None))
 
 
 def _mark_event_processed(supabase_client: Any, event: dict[str, Any]) -> None:
