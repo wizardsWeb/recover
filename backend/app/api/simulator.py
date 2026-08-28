@@ -16,6 +16,7 @@ and keeps snake_case in Python, so the frontend's types read the same as
 ``Merchant``'s do.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
@@ -29,11 +30,19 @@ from app.config import get_settings
 from app.db import get_service_client
 from app.deps import CurrentUserId, UserSupabase
 from app.logging import get_logger
+from app.ml.uplift.model import train_uplift_model
 from app.simulator import loader, reply_generator
 from app.simulator.scenarios import (
     DEFERRED_SCENARIOS,
     SCENARIO_METADATA,
     SCENARIO_REGISTRY,
+)
+from app.simulator.uplift_seed import (
+    DEFAULT_HOLDOUT_RATE,
+    DEFAULT_TOTAL_CASES,
+    MAX_TOTAL_CASES,
+    PLAYBOOK_WEIGHTS,
+    seed_uplift_history,
 )
 
 log = get_logger(__name__)
@@ -556,3 +565,77 @@ def resolve_holdout(
         outcome=payload.outcome,
         amount_cents=payload.amount_cents if recovered else 0,
     )
+
+
+class UpliftSeedRequest(CamelModel):
+    """Knobs on the corpus, all optional — the defaults are the demo."""
+
+    total_cases: int = Field(default=DEFAULT_TOTAL_CASES, ge=40, le=MAX_TOTAL_CASES)
+    holdout_rate: float = Field(default=DEFAULT_HOLDOUT_RATE, gt=0.0, lt=0.9)
+    #: Fixes the draw so a rehearsed demo shows the same numbers twice.
+    seed: int | None = Field(default=None)
+
+
+class SeededPlaybook(CamelModel):
+    playbook: str
+    status: str
+    treated_samples: int = 0
+    control_samples: int = 0
+    mean_cate: float | None = None
+
+
+class UpliftSeedResponse(CamelModel):
+    cases: int
+    treated: int
+    controls: int
+    customers: int
+    models: list[SeededPlaybook]
+
+
+@router.post("/uplift/seed", response_model=UpliftSeedResponse)
+async def seed_uplift(
+    payload: UpliftSeedRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> UpliftSeedResponse:
+    """Manufacture a treated/control history, then fit a model on it.
+
+    The two halves are one endpoint because neither is useful alone: a corpus
+    with no model shows an empty ROI page, and training with nothing to train on
+    reports `insufficient_data` four times. Whoever is running the demo wants the
+    finished state.
+
+    Seeding and fitting both run in a worker thread. The inserts are blocking
+    HTTP calls inside the Supabase client and the fits are CPU-bound sklearn —
+    several hundred rows and four models is long enough on the event loop to
+    stall every other request on the process.
+    """
+    summary = await asyncio.to_thread(
+        seed_uplift_history,
+        supabase,
+        user_id,
+        total_cases=payload.total_cases,
+        holdout_rate=payload.holdout_rate,
+        seed=payload.seed,
+    )
+
+    models: list[SeededPlaybook] = []
+    for playbook in PLAYBOOK_WEIGHTS:
+        outcome = await asyncio.to_thread(train_uplift_model, supabase, user_id, playbook)
+        models.append(
+            SeededPlaybook(
+                playbook=playbook,
+                status=str(outcome.get("status")),
+                treated_samples=int(outcome.get("treated_samples") or 0),
+                control_samples=int(outcome.get("control_samples") or 0),
+                mean_cate=outcome.get("mean_cate"),
+            )
+        )
+
+    log.info(
+        "uplift_seed_complete",
+        merchant_id=user_id,
+        **summary,
+        statuses=[m.status for m in models],
+    )
+    return UpliftSeedResponse(**summary, models=models)
