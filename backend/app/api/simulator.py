@@ -17,8 +17,8 @@ and keeps snake_case in Python, so the frontend's types read the same as
 """
 
 import asyncio
-from datetime import UTC, datetime
-from typing import Annotated, Any, cast
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, Literal, cast
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
@@ -27,9 +27,11 @@ from pydantic.alias_generators import to_camel
 
 from app.agent.core import process_event
 from app.config import get_settings
-from app.db import get_service_client
+from app.db import get_redis_client, get_service_client
 from app.deps import CurrentUserId, UserSupabase
 from app.logging import get_logger
+from app.ml.network.aggregator import IST, normalise_bank, normalise_method
+from app.ml.network.detector import publish_alert
 from app.ml.uplift.model import train_uplift_model
 from app.simulator import loader, reply_generator
 from app.simulator.scenarios import (
@@ -639,3 +641,235 @@ async def seed_uplift(
         statuses=[m.status for m in models],
     )
     return UpliftSeedResponse(**summary, models=models)
+
+
+# ── Network downtime (B3) ──────────────────────────────────────────────
+
+#: What each severity looks like as a success rate, and the story each tells.
+#: Not derived from the z-score bands on purpose — the detector infers severity
+#: from a rate, and this is the inverse, so deriving one from the other would
+#: make the simulator agree with the detector by construction and prove nothing.
+_DOWNTIME_RATES: dict[str, float] = {
+    "critical": 0.20,
+    "high": 0.41,
+    "medium": 0.58,
+}
+
+#: Sample size stamped on the manufactured stats row. Comfortably above the
+#: detector's `MIN_ALERT_SAMPLES` so the simulated outage is one the real
+#: detector would also have called, rather than one only the simulator believes.
+_DOWNTIME_SAMPLE_SIZE = 240
+
+#: The rate a bank returns to when the outage lifts. Above the alert's own
+#: baseline, so `find_resolved_alerts` would also clear it on the next poll —
+#: the scheduled resolution and the real one agree instead of racing.
+_RECOVERED_RATE = 0.86
+
+#: Strong references to pending auto-resolution tasks. The event loop holds only
+#: a weak reference to a task nobody keeps, so a fire-and-forget timer can be
+#: collected mid-sleep. It does not raise; the outage simply never lifts, and
+#: the guardrail goes on blocking retries into a bank that came back.
+_PENDING_RESOLUTIONS: set[asyncio.Task[None]] = set()
+
+
+class DowntimeRequest(CamelModel):
+    bank: str = Field(min_length=1, max_length=32)
+    method: str = Field(min_length=1, max_length=32)
+    severity: Literal["medium", "high", "critical"] = "high"
+    #: Bounded at both ends: a zero-minute outage resolves before anyone sees
+    #: it, and an eight-hour one outlives the process that would have lifted it.
+    duration_minutes: int = Field(default=30, ge=1, le=240)
+
+
+class DowntimeResponse(CamelModel):
+    alert_id: str
+    bank: str
+    method: str
+    severity: str
+    success_rate: float
+    will_resolve_at: str
+
+
+async def _lift_downtime(
+    supabase_client: Any,
+    alert_id: str,
+    bank: str,
+    method: str,
+    delay_seconds: float,
+) -> None:
+    """Wait out the outage, then clear it and say so.
+
+    Everything is suppressed except cancellation. This runs detached from any
+    request, so an exception here would surface only as a task-exception warning
+    in the logs — and the visible symptom would be an outage that never lifts.
+    """
+    try:
+        await asyncio.sleep(delay_seconds)
+        now = datetime.now(UTC).isoformat()
+
+        supabase_client.table("network_alerts").update({"resolved_at": now, "updated_at": now}).eq(
+            "id", alert_id
+        ).execute()
+        _write_network_stat(supabase_client, bank, method, _RECOVERED_RATE)
+
+        await publish_alert(
+            get_redis_client(),
+            {
+                "type": "alert_resolved",
+                "alert": {
+                    "id": alert_id,
+                    "affected_bank": bank,
+                    "affected_method": method,
+                    "resolved_at": now,
+                    "recovered_rate": _RECOVERED_RATE,
+                },
+            },
+        )
+        log.info("simulated_downtime_lifted", alert_id=alert_id, bank=bank, method=method)
+    except asyncio.CancelledError:
+        # Shutdown. The alert stays open in the database, which is the honest
+        # state: nothing observed it recovering.
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("simulated_downtime_lift_error", alert_id=alert_id, error=str(exc))
+
+
+def _write_network_stat(supabase_client: Any, bank: str, method: str, rate: float) -> None:
+    """Stamp a reading for this instrument at the current IST hour.
+
+    Written through the same shape the aggregator uses so the heatmap, the
+    detector and the resolver all see one kind of row. A simulator that invented
+    its own row shape would demo beautifully and diverge from production at the
+    first real poll.
+    """
+    now = datetime.now(UTC)
+    payload = {
+        "bank": bank,
+        "method": method,
+        "hour_of_day": datetime.now(IST).hour,
+        "day_of_week": datetime.now(IST).weekday(),
+        "success_rate": rate,
+        "sample_size": _DOWNTIME_SAMPLE_SIZE,
+        "window_start": (now - timedelta(minutes=10)).isoformat(),
+        "window_end": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    existing = _rows(
+        supabase_client.table("network_stats")
+        .select("id")
+        .eq("bank", bank)
+        .eq("method", method)
+        .eq("hour_of_day", payload["hour_of_day"])
+        .eq("day_of_week", payload["day_of_week"])
+        .gte("window_start", now.replace(minute=0, second=0, microsecond=0).isoformat())
+        .limit(1)
+        .execute()
+    )
+    if existing:
+        supabase_client.table("network_stats").update(payload).eq("id", existing[0]["id"]).execute()
+    else:
+        supabase_client.table("network_stats").insert(payload).execute()
+
+
+@router.post("/network/downtime", response_model=DowntimeResponse)
+async def simulate_downtime(
+    payload: DowntimeRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> DowntimeResponse:
+    """Take a bank down for a fixed window — the B3 scenario.
+
+    Writes the same two rows a real detection writes: the alert the guardrail
+    blocks on, and the degraded stats reading that justifies it. Both matter.
+    An alert with no stats behind it shows a banner and an unexplained heatmap;
+    a stats row with no alert degrades the grid and blocks nothing.
+
+    The alert is inserted **before** anything is published. The row is what stops
+    retries; the Redis message only moves a banner, and publishing first would
+    open a window where the dashboard says a bank is down while the agent is
+    still retrying into it.
+    """
+    bank = normalise_bank(payload.bank)
+    method = normalise_method(payload.method)
+    rate = _DOWNTIME_RATES[payload.severity]
+    now = datetime.now(UTC)
+    resolves_at = now + timedelta(minutes=payload.duration_minutes)
+
+    existing = _rows(
+        supabase.table("network_alerts")
+        .select("id")
+        .eq("affected_bank", bank)
+        .eq("affected_method", method)
+        .is_("resolved_at", "null")
+        .limit(1)
+        .execute()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{bank} {method} is already in a simulated outage.",
+        )
+
+    alert: dict[str, Any] = {
+        "alert_type": "downtime",
+        "affected_bank": bank,
+        "affected_method": method,
+        "severity": payload.severity,
+        "z_score": None,
+        "sample_size": _DOWNTIME_SAMPLE_SIZE,
+        "affected_merchants_count": _network_merchant_count(supabase),
+        "network_wide_success_rate": rate,
+        "baseline_rate": 0.82,
+        "detected_at": now.isoformat(),
+        "resolved_at": None,
+        "metadata": {
+            "source": "simulator",
+            "duration_minutes": payload.duration_minutes,
+            "will_resolve_at": resolves_at.isoformat(),
+        },
+    }
+    written = _rows(supabase.table("network_alerts").insert(alert).execute())
+    alert_id = str(written[0]["id"]) if written else ""
+
+    _write_network_stat(supabase, bank, method, rate)
+
+    await publish_alert(
+        get_redis_client(),
+        {"type": "alert_fired", "alert": {**alert, "id": alert_id}},
+    )
+
+    task = asyncio.create_task(
+        _lift_downtime(supabase, alert_id, bank, method, payload.duration_minutes * 60)
+    )
+    _PENDING_RESOLUTIONS.add(task)
+    task.add_done_callback(_PENDING_RESOLUTIONS.discard)
+
+    log.info(
+        "simulated_downtime_started",
+        alert_id=alert_id,
+        bank=bank,
+        method=method,
+        severity=payload.severity,
+        duration_minutes=payload.duration_minutes,
+    )
+    return DowntimeResponse(
+        alert_id=alert_id,
+        bank=bank,
+        method=method,
+        severity=payload.severity,
+        success_rate=rate,
+        will_resolve_at=resolves_at.isoformat(),
+    )
+
+
+def _network_merchant_count(supabase_client: Any) -> int:
+    """How wide to claim the outage is.
+
+    Read through the caller's own client, so it counts what this merchant can
+    see — one. The number is then floored at a plausible network size, because
+    the sentence the demo is making ("this is hitting eight of you") is a claim
+    about a network that a single-tenant fixture cannot produce, and a simulator
+    that rendered "affecting 1 merchant" would be simulating the wrong thing.
+    """
+    rows = _rows(supabase_client.table("merchants").select("id").limit(50).execute())
+    return max(len(rows), 8)
