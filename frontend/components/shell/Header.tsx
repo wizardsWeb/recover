@@ -13,6 +13,10 @@ interface HeaderProps {
 }
 
 /**
+ * The header sits on `bg-base`, the page surface, rather than on `bg-elevated`.
+ * A white bar above an off-white page draws a line the content does not need;
+ * matching the surface lets the single hairline underneath do that job alone.
+ *
  * Notifications are still inert — there is nothing to notify about until the
  * agent runs — but the bell is rendered so the chrome does not move under the
  * user later. Search is live: the box is the CommandPalette's own trigger, so
@@ -22,7 +26,7 @@ const NOTIFICATION_COUNT = 0;
 
 export function Header({ email, businessName }: HeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-hairline bg-elevated px-6 print:hidden">
+    <header className="flex h-[52px] shrink-0 items-center gap-4 border-b border-hairline bg-base px-6 print:hidden">
       <Breadcrumbs />
 
       <div className="mx-auto hidden w-full max-w-md md:block">
