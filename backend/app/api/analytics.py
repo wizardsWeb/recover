@@ -264,3 +264,205 @@ def _confidence_interval(mean: float, mass: float) -> tuple[float, float]:
         return 0.0, 1.0
     margin = _Z_95 * math.sqrt(max(mean * (1.0 - mean), 0.0) / n)
     return max(0.0, mean - margin), min(1.0, mean + margin)
+
+
+#: Statuses that mean a case has an observed outcome. An open case has nothing
+#: to attribute yet, and counting it would dilute every rate on the page.
+_CLOSED_STATUSES = frozenset({"recovered", "stopped", "failed", "holdout"})
+
+#: Holdout outcomes that count as observed. `unknown` is an assigned control
+#: nobody has resolved: it teaches nothing and must not enter the denominator,
+#: where it would read as a failure to recover and inflate measured lift.
+_RESOLVED_OUTCOMES = frozenset({"recovered", "not_recovered"})
+
+#: Bucket for a case that closed before any model could label it. Real holdouts
+#: are assigned at detect, before diagnosis, so this is the normal state for a
+#: control — not an error.
+_UNBUCKETED = "unknown"
+
+_NO_CONTROLS_NOTE = (
+    "No resolved holdout cases yet, so incremental recovery cannot be estimated. "
+    "Gross recovery is every rupee that arrived after the agent acted — including "
+    "from customers who would have paid anyway. Until a control group resolves, "
+    "there is no way to tell those apart, and this page will not guess."
+)
+
+_METHODOLOGY_NOTE = (
+    "Gross recovery counts every rupee recovered on a case the agent worked. "
+    "Incremental recovery is what the agent caused: within each uplift bucket, the "
+    "treated recovery rate minus the rate observed in the holdout group, applied to "
+    "that bucket's gross. Customers who would have paid regardless contribute close "
+    "to nothing, and a bucket where contact hurt contributes a negative amount. "
+    "The holdout group is the only reason the two numbers can differ — without cases "
+    "the agent deliberately left alone, there is nothing to compare against."
+)
+
+
+def _recovered(case: dict[str, Any]) -> bool:
+    return int(case.get("amount_recovered_cents") or 0) > 0
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
+
+
+@router.get("/uplift")
+async def get_uplift_roi(
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+    playbook: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Gross recovery against the part of it the agent actually caused.
+
+    The two numbers answer different questions and the gap between them is the
+    point of the page. Gross is what a recovery dashboard normally reports:
+    money that arrived after a message. Incremental subtracts what would have
+    arrived anyway, which is knowable only because a slice of cases was
+    deliberately left alone.
+
+    Attribution happens here rather than in the agent loop. The loop still
+    messages a `sure_thing` — the send is nearly free and the recovery is real —
+    but a recovery from a customer who was going to pay regardless is not
+    *caused*, and the difference-in-rates below is where that is charged back.
+
+    With no resolved controls the response reports gross and says plainly that
+    incremental is unknown. A plausible-looking number derived from no control
+    group would be the single most misleading thing this product could render.
+    """
+    query = (
+        supabase.table("recovery_cases")
+        .select(
+            "id, playbook, status, uplift_bucket, is_holdout, "
+            "amount_at_risk_cents, amount_recovered_cents"
+        )
+        .eq("merchant_id", user_id)
+    )
+    if playbook:
+        query = query.eq("playbook", playbook)
+    cases = [row for row in _rows(query.execute()) if row.get("status") in _CLOSED_STATUSES]
+
+    resolved_controls = {
+        str(row["case_id"])
+        for row in _rows(
+            supabase.table("uplift_holdouts")
+            .select("case_id, outcome")
+            .eq("merchant_id", user_id)
+            .execute()
+        )
+        if row.get("outcome") in _RESOLVED_OUTCOMES
+    }
+
+    treated = [case for case in cases if not case.get("is_holdout")]
+    control = [
+        case
+        for case in cases
+        if case.get("is_holdout") and str(case.get("id")) in resolved_controls
+    ]
+
+    gross_cents = sum(int(case.get("amount_recovered_cents") or 0) for case in treated)
+    control_recovered = sum(1 for case in control if _recovered(case))
+    global_control_rate = _rate(control_recovered, len(control))
+
+    holdout_stats = {
+        "holdout_cases": sum(1 for case in cases if case.get("is_holdout")),
+        "resolved_controls": len(control),
+        "control_recoveries": control_recovered,
+        "control_recovery_rate": global_control_rate,
+        "treated_cases": len(treated),
+        "treated_recovery_rate": _rate(
+            sum(1 for case in treated if _recovered(case)), len(treated)
+        ),
+        "holdout_share": _rate(len(control), len(control) + len(treated)),
+    }
+
+    if not control:
+        return {
+            "gross_recovery_cents": gross_cents,
+            "incremental_recovery_cents": None,
+            "incremental_pct_of_gross": None,
+            "is_estimable": False,
+            "bucket_breakdown": [],
+            "holdout_stats": holdout_stats,
+            "methodology_note": _NO_CONTROLS_NOTE,
+        }
+
+    breakdown = _bucket_breakdown(treated, control, global_control_rate)
+    incremental_cents = sum(int(row["incremental_recovery_cents"]) for row in breakdown)
+
+    # What the control group cost: the recoveries those cases would have
+    # produced had they been worked. Stating it is the only way the 5% is an
+    # informed choice rather than an invisible tax.
+    treated_rate = float(holdout_stats["treated_recovery_rate"])
+    avg_control_at_risk = sum(int(case.get("amount_at_risk_cents") or 0) for case in control) / len(
+        control
+    )
+    holdout_stats["foregone_recovery_cents"] = max(
+        0, round((treated_rate - global_control_rate) * len(control) * avg_control_at_risk)
+    )
+
+    return {
+        "gross_recovery_cents": gross_cents,
+        "incremental_recovery_cents": incremental_cents,
+        "incremental_pct_of_gross": _rate(incremental_cents, gross_cents) if gross_cents else None,
+        "is_estimable": True,
+        "bucket_breakdown": breakdown,
+        "holdout_stats": holdout_stats,
+        "methodology_note": _METHODOLOGY_NOTE,
+    }
+
+
+def _bucket_breakdown(
+    treated: list[dict[str, Any]],
+    control: list[dict[str, Any]],
+    global_control_rate: float,
+) -> list[dict[str, Any]]:
+    """Per-bucket lift, and the share of gross it accounts for.
+
+    A bucket's own control rate is used when it has controls of its own.
+    Otherwise the global rate stands in — a real holdout is assigned before
+    diagnosis and so usually carries no bucket at all, which would otherwise
+    leave every bucket with an empty comparison and a lift of exactly its own
+    recovery rate.
+    """
+    treated_by_bucket: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for case in treated:
+        treated_by_bucket[str(case.get("uplift_bucket") or _UNBUCKETED)].append(case)
+
+    control_by_bucket: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for case in control:
+        control_by_bucket[str(case.get("uplift_bucket") or _UNBUCKETED)].append(case)
+
+    rows: list[dict[str, Any]] = []
+    for bucket, cases in sorted(treated_by_bucket.items()):
+        controls = control_by_bucket.get(bucket, [])
+        uses_global = len(controls) < 2
+        control_rate = (
+            global_control_rate
+            if uses_global
+            else _rate(sum(1 for case in controls if _recovered(case)), len(controls))
+        )
+
+        recovered_count = sum(1 for case in cases if _recovered(case))
+        treated_rate = _rate(recovered_count, len(cases))
+        bucket_gross = sum(int(case.get("amount_recovered_cents") or 0) for case in cases)
+        lift = round(treated_rate - control_rate, 4)
+
+        # gross == treated_rate x cases x average recovery, so scaling gross by
+        # lift/treated_rate is the same as pricing the lift at that average —
+        # without a second division that would need its own zero guard.
+        incremental = round(bucket_gross * lift / treated_rate) if treated_rate > 0 else 0
+
+        rows.append(
+            {
+                "bucket": bucket,
+                "treated_cases": len(cases),
+                "treated_recovery_rate": treated_rate,
+                "control_cases": len(controls),
+                "control_recovery_rate": control_rate,
+                "uses_global_control_rate": uses_global,
+                "estimated_lift": lift,
+                "gross_recovery_cents": bucket_gross,
+                "incremental_recovery_cents": incremental,
+            }
+        )
+    return rows
