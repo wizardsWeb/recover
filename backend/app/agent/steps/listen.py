@@ -15,11 +15,12 @@ Matching is word-boundary, not substring. That distinction is load-bearing:
 and a naive ``in`` test would read "maybe later" as a commitment and pause the
 recovery on it.
 
-Order of evaluation is by consequence, most binding first: opt-out, then
-hardship, then churn, then promise. A message carrying two signals is resolved
-in favour of the one that most restricts what the agent may do next — and the
-LLM prompt states the same order, so the two layers cannot disagree about which
-signal wins.
+Order of evaluation is by consequence, most binding first: an explicit opt-out,
+then hardship, then churn, then a bare "cancel", then a promise. A message
+carrying two signals resolves to the one that most restricts what the agent may
+do next — and the LLM prompt states the same order, so the two layers cannot
+disagree about which signal wins. The one deliberate exception is "cancel",
+which sits below churn; see the pattern list for why.
 
 The classification is written back onto the ``customer_replies`` row, into
 ``llm_classification`` and ``applied_state_update``. That second column is also
@@ -43,10 +44,9 @@ from app.logging import get_logger
 
 logger = get_logger(__name__)
 
-# NOTE: "cancel" appears here and "cancel subscription" under CHURN_PATTERNS.
-# Opt-out is tested first, so a bare "cancel" revokes consent rather than
-# closing the subscription. That is the safe direction to be wrong in, and
-# Phase 5's classifier is what tells the two apart properly.
+#: Phrases that can only mean "stop contacting me". Tested before everything
+#: else, because missing one is a compliance breach and honouring one that was
+#: not quite meant costs a single recovery.
 OPT_OUT_PATTERNS = [
     "stop",
     "band karo",
@@ -54,11 +54,21 @@ OPT_OUT_PATTERNS = [
     "unsubscribe",
     "opt out",
     "opt-out",
-    "cancel",
     "band karo yeh",
     "nahi chahiye",
     "do not contact",
 ]
+
+#: "cancel" on its own, which is genuinely ambiguous.
+#:
+#: It is the same word in "cancel these messages" and in "cancel my son's
+#: coaching", and those need opposite responses: one revokes consent on every
+#: channel, the other ends a subscription and hands a high-LTV customer to a
+#: retention team. So it is tested *after* the churn phrases — "cancel kar do"
+#: reaches CHURN_PATTERNS and is read as churn — and a bare "cancel" with no
+#: other signal still falls through to here and revokes, which is the safe
+#: reading when there is nothing else to go on.
+AMBIGUOUS_OPT_OUT_PATTERNS = ["cancel"]
 
 PROMISE_TO_PAY_PATTERNS = [
     "kar deta hoon",
@@ -105,6 +115,7 @@ def _compile(patterns: list[str]) -> re.Pattern[str]:
 
 
 _OPT_OUT_RE = _compile(OPT_OUT_PATTERNS)
+_AMBIGUOUS_OPT_OUT_RE = _compile(AMBIGUOUS_OPT_OUT_PATTERNS)
 _PROMISE_RE = _compile(PROMISE_TO_PAY_PATTERNS)
 _HARDSHIP_RE = _compile(HARDSHIP_PATTERNS)
 _CHURN_RE = _compile(CHURN_PATTERNS)
@@ -249,6 +260,18 @@ def _pattern_match_fallback(raw: str, reply_id: Any = None) -> ListenResult:
             hardship_signal=False,
             churn_signal=True,
             recommended_state_update="STOP_RECOVERY_HUMAN_RETENTION_HANDOFF",
+            is_stub=True,
+        )
+
+    if _matches_any(raw, _AMBIGUOUS_OPT_OUT_RE):
+        return ListenResult(
+            reply_id=reply_id_str,
+            intent=ReplyIntent.EXPLICIT_OPT_OUT,
+            language="hinglish",
+            opt_out_signal=True,
+            hardship_signal=False,
+            churn_signal=False,
+            recommended_state_update="REVOKE_CONSENT_ALL_CHANNELS",
             is_stub=True,
         )
 

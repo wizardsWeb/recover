@@ -45,6 +45,7 @@ from typing import Any
 from app.agent import audit
 from app.agent.bandit.reward import post_reward
 from app.agent.guardrail import run_guardrail
+from app.agent.handoff import create_handoff_attempt
 from app.agent.models import (
     ActionType,
     AgentLoopResult,
@@ -332,7 +333,13 @@ async def run_agent_loop(
         heard_early = False
         if pending_reply:
             listen, early_status, early_reason = await _run_listen_stage(
-                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+                supabase_client,
+                case,
+                customer,
+                pending_reply,
+                trace_id,
+                merchant_id,
+                decision_dict,
             )
             steps_completed.append(StepName.LISTEN)
             heard_early = True
@@ -412,7 +419,13 @@ async def run_agent_loop(
             final_status, close_reason = CaseStatus.IN_FLIGHT, None
         else:
             listen, final_status, close_reason = await _run_listen_stage(
-                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+                supabase_client,
+                case,
+                customer,
+                pending_reply,
+                trace_id,
+                merchant_id,
+                decision_dict,
             )
             steps_completed.append(StepName.LISTEN)
 
@@ -517,6 +530,7 @@ async def _run_listen_stage(
     pending_reply: dict[str, Any] | None,
     trace_id: str,
     merchant_id: str,
+    decision: dict[str, Any] | None = None,
 ) -> tuple[ListenResult, CaseStatus, str | None]:
     """Classify any pending reply, apply what it implies, and audit both.
 
@@ -579,7 +593,13 @@ async def _run_listen_stage(
             ("Customer opted out — consent revoked across all channels"),
         )
 
+    # Hardship and churn both stop the agent and start a person. The briefing is
+    # written here, beside the decision to stop, so a case can never be closed
+    # for a human to pick up without the context they need to pick it up.
     if listen.hardship_signal:
+        _hand_off(
+            supabase_client, case, customer, "hardship", merchant_id, trace_id, decision, listen
+        )
         return (
             listen,
             CaseStatus.STOPPED,
@@ -587,6 +607,7 @@ async def _run_listen_stage(
         )
 
     if listen.churn_signal:
+        _hand_off(supabase_client, case, customer, "churn", merchant_id, trace_id, decision, listen)
         return (
             listen,
             CaseStatus.STOPPED,
@@ -597,6 +618,29 @@ async def _run_listen_stage(
         await handle_promise_to_pay(supabase_client, case_id, listen, merchant_id, trace_id)
 
     return listen, CaseStatus.IN_FLIGHT, None
+
+
+def _hand_off(
+    supabase_client: Any,
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    reason: str,
+    merchant_id: str,
+    trace_id: str,
+    decision: dict[str, Any] | None,
+    listen: ListenResult,
+) -> None:
+    """Write the handoff briefing for a case a person now owns."""
+    create_handoff_attempt(
+        supabase_client,
+        case,
+        customer,
+        reason,
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+        chosen_arm=(decision or {}).get("chosen_arm"),
+        customer_reply=listen.raw_text,
+    )
 
 
 async def handle_promise_to_pay(
