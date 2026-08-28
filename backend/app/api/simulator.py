@@ -26,6 +26,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from app.agent.causal_dag.seed import seed_causal_dag
 from app.agent.core import process_event
 from app.agent.playbooks import PLAYBOOK_CONFIGS
 from app.config import get_settings
@@ -1147,3 +1148,29 @@ async def get_batch(
     if not rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown batch run.")
     return _batch_response(rows[0])
+
+
+# ── Causal DAG definitions ─────────────────────────────────────────────
+
+
+class DagSeedResponse(CamelModel):
+    nodes: int
+    playbooks: list[str]
+    dag_version: str
+
+
+@router.post("/dag/seed", response_model=DagSeedResponse)
+async def seed_dag(user_id: CurrentUserId, supabase: UserSupabase) -> DagSeedResponse:
+    """Publish the causal graph definitions into `causal_dag`.
+
+    Service-role, like the network seeder and for the same reason: the table is
+    global reference data with no merchant column, so no RLS policy exists that
+    a user client could satisfy for a write.
+
+    The rows are a published copy, not the source. `definitions.py` is what the
+    agent reasons from and what the API serves, so a stale table degrades a SQL
+    query rather than a diagnosis.
+    """
+    summary = await asyncio.to_thread(seed_causal_dag, get_service_client())
+    log.info("dag_seed_requested", merchant_id=user_id, **summary)
+    return DagSeedResponse(**summary)

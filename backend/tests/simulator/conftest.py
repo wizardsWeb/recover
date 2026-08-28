@@ -46,6 +46,12 @@ def client(db: FakeSupabase, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestCl
     empty = FakeSupabase()
     monkeypatch.setattr("app.api.simulator.get_service_client", lambda: empty)
     monkeypatch.setattr("app.api.events.get_service_client", lambda: empty)
+    # Fixture loading publishes the causal graph, which is global reference data
+    # and so needs the service role. Left unpatched, every load builds a real
+    # Supabase client against the stub URL in `tests/conftest.py` and waits for
+    # it to fail — swallowed, so it shows up as a slow suite rather than an
+    # error.
+    monkeypatch.setattr("app.simulator.loader.get_service_client", lambda: db)
 
     with TestClient(app) as test_client:
         yield test_client

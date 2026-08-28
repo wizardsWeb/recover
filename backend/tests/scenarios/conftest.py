@@ -58,3 +58,19 @@ def deterministic_bandit(monkeypatch: pytest.MonkeyPatch) -> None:
         return (alpha / mass) if mass > 0 else 0.5
 
     monkeypatch.setattr(thompson, "sample_beta", _mean)
+
+
+@pytest.fixture(autouse=True)
+def offline_dag_seed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep fixture loading from reaching for a real Supabase client.
+
+    Loading publishes the causal graph, which is global reference data and so
+    goes through the service role. Unpatched, that builds a live client against
+    the stub URL in `tests/conftest.py` and waits for it to fail — swallowed by
+    the loader, so the symptom is a slow suite rather than an error.
+
+    The seeding itself is covered directly in `tests/agent/test_causal_dag_seed`.
+    """
+    from app.simulator import loader
+
+    monkeypatch.setattr(loader, "seed_causal_dag", lambda _: {"nodes": 0})

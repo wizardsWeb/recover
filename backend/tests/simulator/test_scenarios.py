@@ -218,3 +218,18 @@ def test_status_caps_the_event_tail_at_twenty(loaded_client: TestClient) -> None
     body = loaded_client.get("/api/simulator/status").json()
 
     assert len(body["recentEvents"]) == 20
+
+
+def test_loading_fixtures_publishes_the_causal_graph(
+    loaded_client: TestClient, db: FakeSupabase
+) -> None:
+    """A freshly loaded environment should not need a second call to see the
+    graph in `causal_dag` — and the write goes through the service role, which
+    the fixture points at this same fake."""
+    assert db.rows("causal_dag")
+    assert {row["playbook"] for row in db.rows("causal_dag")} == {
+        "subscription_failure",
+        "checkout_abandonment",
+        "failed_payment",
+        "b2b_overdue",
+    }

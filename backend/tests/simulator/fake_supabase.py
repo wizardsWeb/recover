@@ -316,8 +316,17 @@ class _Query:
             for item in payload:
                 existing = None
                 if self._on_conflict:
-                    key = self._on_conflict
-                    existing = next((row for row in rows if row.get(key) == item.get(key)), None)
+                    # PostgREST takes a comma-separated conflict target, and a
+                    # composite one is the normal case for reference tables.
+                    # Treating the whole string as a single column name would
+                    # compare None to None on every row and match the first —
+                    # so an upsert of forty nodes would overwrite one row forty
+                    # times and report success.
+                    keys = [key.strip() for key in self._on_conflict.split(",") if key.strip()]
+                    existing = next(
+                        (row for row in rows if all(row.get(key) == item.get(key) for key in keys)),
+                        None,
+                    )
                 if existing is not None:
                     existing.update(item)
                     written.append(dict(existing))
