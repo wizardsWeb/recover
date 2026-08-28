@@ -1,6 +1,7 @@
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
+import { CommandPalette } from "@/components/shell/CommandPalette";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,10 @@ interface HeaderProps {
 }
 
 /**
- * Search and notifications are deliberately inert in Phase 1 — the command
- * palette lands with Phase 2, and there is nothing to notify about until the
- * agent runs. Both are rendered so the chrome does not move under the user
- * when they start working.
+ * Notifications are still inert — there is nothing to notify about until the
+ * agent runs — but the bell is rendered so the chrome does not move under the
+ * user later. Search is live: the box is the CommandPalette's own trigger, so
+ * this stays a server component and only the palette ships to the client.
  */
 const NOTIFICATION_COUNT = 0;
 
@@ -25,17 +26,7 @@ export function Header({ email, businessName }: HeaderProps) {
       <Breadcrumbs />
 
       <div className="mx-auto hidden w-full max-w-md md:block">
-        <button
-          type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-md border border-hairline bg-subtle px-3 py-1.5 text-sm text-ink-faint disabled:cursor-not-allowed"
-        >
-          <Search className="size-4 shrink-0" aria-hidden />
-          <span className="flex-1 text-left">Search cases, customers, IDs…</span>
-          <kbd className="rounded-sm border border-hairline bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
-            ⌘K
-          </kbd>
-        </button>
+        <CommandPalette />
       </div>
 
       <div className="ml-auto flex items-center gap-1">
