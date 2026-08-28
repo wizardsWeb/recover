@@ -209,7 +209,7 @@ async def run_agent_loop(
             {"uplift_bucket": uplift.bucket.value, "current_step": "uplift_check"},
         )
         if uplift.verdict == "SKIP":
-            listen, exit_reason = await _hear_pending_reply(
+            listen, exit_status, exit_reason = await _hear_pending_reply(
                 supabase_client,
                 case,
                 customer,
@@ -219,17 +219,19 @@ async def run_agent_loop(
                 steps_completed,
                 fallback_reason="Uplift check: not a persuadable case",
             )
-            await _close_case(
-                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
-            )
+            if exit_status in _TERMINAL_STATUSES:
+                await _close_case(
+                    supabase_client, case_id, exit_status, exit_reason, trace_id, merchant_id
+                )
             steps_completed.append(StepName.AUDIT)
-            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
+            if exit_status in _TERMINAL_STATUSES:
+                await _post_close_reward(supabase_client, case, exit_status, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
                 playbook=playbook_enum,
                 steps_completed=steps_completed,
-                final_status=CaseStatus.STOPPED,
+                final_status=exit_status,
                 diagnosis=diagnosis,
                 uplift=uplift,
                 listen=listen,
@@ -288,7 +290,7 @@ async def run_agent_loop(
         # A second downgrade means every allowed channel has been tried, so there
         # is nowhere left to fall back to and it is treated as a block.
         if guardrail.verdict != "PASS":
-            listen, exit_reason = await _hear_pending_reply(
+            listen, exit_status, exit_reason = await _hear_pending_reply(
                 supabase_client,
                 case,
                 customer,
@@ -297,18 +299,21 @@ async def run_agent_loop(
                 merchant_id,
                 steps_completed,
                 fallback_reason=f"Guardrail blocked: {guardrail.blocking_check}",
+                decision=decision_dict,
             )
-            await _close_case(
-                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
-            )
+            if exit_status in _TERMINAL_STATUSES:
+                await _close_case(
+                    supabase_client, case_id, exit_status, exit_reason, trace_id, merchant_id
+                )
             steps_completed.append(StepName.AUDIT)
-            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
+            if exit_status in _TERMINAL_STATUSES:
+                await _post_close_reward(supabase_client, case, exit_status, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
                 playbook=playbook_enum,
                 steps_completed=steps_completed,
-                final_status=CaseStatus.STOPPED,
+                final_status=exit_status,
                 diagnosis=diagnosis,
                 uplift=uplift,
                 decision=decision,
@@ -732,7 +737,8 @@ async def _hear_pending_reply(
     steps_completed: list[StepName],
     *,
     fallback_reason: str,
-) -> tuple[ListenResult | None, str]:
+    decision: dict[str, Any] | None = None,
+) -> tuple[ListenResult | None, CaseStatus, str]:
     """Run the listen stage on an early exit, if a reply is waiting.
 
     Listening is perception, not action. A pass that the uplift check or the
@@ -744,15 +750,21 @@ async def _hear_pending_reply(
     A reason derived from the customer's own words outranks the machine's:
     "customer opted out" is the truer account of why the case closed than
     "guardrail blocked", so it wins when both are available.
+
+    **And so does the customer's status.** The returned status is what listening
+    concluded, not an assumed stop. A pass that cannot send because the daily cap
+    is spent, on a case where the customer has just promised to pay on the 25th,
+    must leave that case open — being blocked from speaking is not a reason to
+    abandon a recovery the customer is still cooperating with.
     """
     if not pending_reply:
-        return None, fallback_reason
+        return None, CaseStatus.STOPPED, fallback_reason
 
-    listen, _status, close_reason = await _run_listen_stage(
-        supabase_client, case, customer, pending_reply, trace_id, merchant_id
+    listen, status, close_reason = await _run_listen_stage(
+        supabase_client, case, customer, pending_reply, trace_id, merchant_id, decision
     )
     steps_completed.append(StepName.LISTEN)
-    return listen, close_reason or fallback_reason
+    return listen, status, close_reason or fallback_reason
 
 
 async def _get_or_create_case(

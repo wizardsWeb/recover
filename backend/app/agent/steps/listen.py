@@ -125,6 +125,55 @@ def _matches_any(text: str, pattern: re.Pattern[str]) -> bool:
     return bool(pattern.search(text.lower().strip()))
 
 
+#: "50%", "50 percent", "half".
+_PERCENT_RE = re.compile(r"(\d{1,3})\s*(?:%|percent|pct)")
+
+#: A date the customer named, in the forms these replies actually use:
+#: "25 tak", "by the 25th", "next month", "kal", "Monday".
+_DATE_HINT_RES = [
+    re.compile(r"\b(\d{1,2}\s*(?:tak|tarikh))"),
+    re.compile(r"\b(?:by|before)\s+(?:the\s+)?(\d{1,2}(?:st|nd|rd|th)?)"),
+    re.compile(r"\b(next month|this month|next week|kal|parso|aaj)\b"),
+    re.compile(
+        r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    ),
+]
+
+
+def _promise_entities(raw: str) -> dict[str, Any]:
+    """Pull the terms out of a promise, as far as a regex honestly can.
+
+    Gemini does this properly. This runs when Gemini cannot, and a promise with
+    no date and no amount is close to useless downstream — the case pauses with
+    nothing to pause *until*. Best-effort beats empty here, and every value is
+    copied from the customer's own words rather than resolved to a calendar
+    date, so a wrong guess is visible rather than authoritative.
+    """
+    text = raw.lower().strip()
+    entities: dict[str, Any] = {
+        "partial_pct": None,
+        "promise_date_hint": None,
+        "amount_mentioned": None,
+        "reason_offered": None,
+    }
+
+    percent = _PERCENT_RE.search(text)
+    if percent:
+        value = int(percent.group(1))
+        if 0 < value <= 100:
+            entities["partial_pct"] = value
+    elif re.search(r"\bhalf\b|\baadha\b", text):
+        entities["partial_pct"] = 50
+
+    for pattern in _DATE_HINT_RES:
+        found = pattern.search(text)
+        if found:
+            entities["promise_date_hint"] = found.group(1).strip()
+            break
+
+    return entities
+
+
 async def run_listen(
     case: dict[str, Any],
     customer_reply: dict[str, Any] | None,
@@ -283,6 +332,7 @@ def _pattern_match_fallback(raw: str, reply_id: Any = None) -> ListenResult:
             opt_out_signal=False,
             hardship_signal=False,
             churn_signal=False,
+            extracted_entities=_promise_entities(raw),
             recommended_state_update="PAUSE_RECOVERY_TRACK_PROMISE",
             is_stub=True,
         )
