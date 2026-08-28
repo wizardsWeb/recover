@@ -93,3 +93,22 @@ export function formatRelativeTime(value: Date | string | number, from: Date = n
 export function formatPercent(rate: number, fractionDigits = 1): string {
   return `${(rate * 100).toFixed(fractionDigits)}%`;
 }
+
+/**
+ * Format a figure that is already in **rupees**, not paise.
+ *
+ * Every money column in the database holds paise, so `formatINR` takes paise
+ * and that is the right default. The batch simulator is the one exception: its
+ * result object is denominated in rupees, because it never touches a money
+ * column — it is a simulation whose numbers exist only inside its own JSON.
+ * Passing one of those to `formatINR` would render a hundredth of the figure,
+ * which is wrong in a way that still looks plausible.
+ */
+export function formatRupees(rupees: number): string {
+  return formatINR(Math.round(rupees * 100));
+}
+
+/** Compact rupees for a dense tile, from a rupee figure: `"₹1.45L"`. */
+export function formatRupeesCompact(rupees: number): string {
+  return formatINRCompact(Math.round(rupees * 100));
+}
