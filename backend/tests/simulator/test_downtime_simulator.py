@@ -24,6 +24,24 @@ B3 = {"bank": "SBI", "method": "upi", "severity": "high", "durationMinutes": 30}
 
 
 @pytest.fixture(autouse=True)
+def service_db(
+    client: TestClient, db: FakeSupabase, monkeypatch: pytest.MonkeyPatch
+) -> FakeSupabase:
+    """Point the service-role client at the same fake the caller's client uses.
+
+    Depends on `client` so it patches *after* the shared fixture does — that one
+    aims the service client at an empty database to keep the agent loop away
+    from these tests, and the last writer wins.
+
+    Convenient for every other assertion in this file, and deliberately *not*
+    used by `test_the_network_tables_are_written_with_the_service_role`, which
+    hands the two clients separate databases so the distinction is visible.
+    """
+    monkeypatch.setattr(module, "get_service_client", lambda: db)
+    return db
+
+
+@pytest.fixture(autouse=True)
 def captured_publishes(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     """Record what reached the alerts channel, without needing a Redis."""
     seen: list[dict[str, Any]] = []
@@ -59,6 +77,28 @@ def test_an_outage_writes_both_the_alert_and_the_reading_behind_it(
     assert alert["resolved_at"] is None
     assert stat["success_rate"] == 0.41
     assert stat["hour_of_day"] == __import__("datetime").datetime.now(IST).hour
+
+
+def test_the_network_tables_are_written_with_the_service_role(
+    client: TestClient, db: FakeSupabase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`network_alerts` and `network_stats` are global reference tables.
+
+    Their RLS grants an authenticated user `SELECT` and nothing else, so writing
+    them through the caller's client fails with 42501 — a 500 the endpoint has
+    no way to explain. `FakeSupabase` does not enforce RLS and never will, so
+    the property is asserted structurally instead: hand the two clients separate
+    databases, and check the rows land in the privileged one.
+    """
+    service = FakeSupabase()
+    monkeypatch.setattr(module, "get_service_client", lambda: service)
+
+    assert client.post("/api/simulator/network/downtime", json=B3).status_code == 200
+
+    assert len(service.rows("network_alerts")) == 1
+    assert len(service.rows("network_stats")) == 1
+    assert db.rows("network_alerts") == []
+    assert db.rows("network_stats") == []
 
 
 def test_the_bank_and_method_are_stored_in_the_case_the_guardrail_queries(
@@ -237,5 +277,9 @@ def test_the_pending_timer_is_strongly_referenced(client: TestClient) -> None:
 def test_the_endpoint_requires_authentication() -> None:
     from app.main import app
 
+    # The autouse fixtures above pull in the shared `client`, which installs
+    # dependency overrides on the application object. They have to come back off
+    # for the real auth dependency to be what answers.
+    app.dependency_overrides.clear()
     with TestClient(app) as anonymous:
         assert anonymous.post("/api/simulator/network/downtime", json=B3).status_code in (401, 403)

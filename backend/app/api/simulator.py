@@ -762,7 +762,10 @@ def _write_network_stat(supabase_client: Any, bank: str, method: str, rate: floa
         .eq("method", method)
         .eq("hour_of_day", payload["hour_of_day"])
         .eq("day_of_week", payload["day_of_week"])
-        .gte("window_start", now.replace(minute=0, second=0, microsecond=0).isoformat())
+        # `window_end`, for the same reason the aggregator uses it: the window
+        # trails the reading, so a start-keyed match misses its own row in the
+        # first ten minutes of every hour.
+        .gte("window_end", now.replace(minute=0, second=0, microsecond=0).isoformat())
         .limit(1)
         .execute()
     )
@@ -785,11 +788,20 @@ async def simulate_downtime(
     An alert with no stats behind it shows a banner and an unexplained heatmap;
     a stats row with no alert degrades the grid and blocks nothing.
 
+    Both writes go through the **service-role** client, like the network seeder
+    and unlike everything else in this router. `network_alerts` and
+    `network_stats` are global reference tables: their RLS grants authenticated
+    users `SELECT` and nothing else, because a merchant has no business writing
+    a network-wide outage. The caller's own client is still used to *read* — the
+    duplicate-alert check below — so the endpoint reads with exactly the
+    privileges the dashboard has.
+
     The alert is inserted **before** anything is published. The row is what stops
     retries; the Redis message only moves a banner, and publishing first would
     open a window where the dashboard says a bank is down while the agent is
     still retrying into it.
     """
+    service = get_service_client()
     bank = normalise_bank(payload.bank)
     method = normalise_method(payload.method)
     rate = _DOWNTIME_RATES[payload.severity]
@@ -818,7 +830,7 @@ async def simulate_downtime(
         "severity": payload.severity,
         "z_score": None,
         "sample_size": _DOWNTIME_SAMPLE_SIZE,
-        "affected_merchants_count": _network_merchant_count(supabase),
+        "affected_merchants_count": _network_merchant_count(service),
         "network_wide_success_rate": rate,
         "baseline_rate": 0.82,
         "detected_at": now.isoformat(),
@@ -829,10 +841,10 @@ async def simulate_downtime(
             "will_resolve_at": resolves_at.isoformat(),
         },
     }
-    written = _rows(supabase.table("network_alerts").insert(alert).execute())
+    written = _rows(service.table("network_alerts").insert(alert).execute())
     alert_id = str(written[0]["id"]) if written else ""
 
-    _write_network_stat(supabase, bank, method, rate)
+    _write_network_stat(service, bank, method, rate)
 
     await publish_alert(
         get_redis_client(),
@@ -840,7 +852,7 @@ async def simulate_downtime(
     )
 
     task = asyncio.create_task(
-        _lift_downtime(supabase, alert_id, bank, method, payload.duration_minutes * 60)
+        _lift_downtime(service, alert_id, bank, method, payload.duration_minutes * 60)
     )
     _PENDING_RESOLUTIONS.add(task)
     task.add_done_callback(_PENDING_RESOLUTIONS.discard)
@@ -866,11 +878,12 @@ async def simulate_downtime(
 def _network_merchant_count(supabase_client: Any) -> int:
     """How wide to claim the outage is.
 
-    Read through the caller's own client, so it counts what this merchant can
-    see — one. The number is then floored at a plausible network size, because
-    the sentence the demo is making ("this is hitting eight of you") is a claim
+    A count and nothing else — the same posture as the real detector's
+    `affected_merchants_count`, where a cardinality is the only cross-tenant
+    fact that ever leaves. Floored at a plausible network size, because the
+    sentence the demo is making ("this is hitting eight of you") is a claim
     about a network that a single-tenant fixture cannot produce, and a simulator
-    that rendered "affecting 1 merchant" would be simulating the wrong thing.
+    rendering "affecting 1 merchant" would be simulating the wrong thing.
     """
     rows = _rows(supabase_client.table("merchants").select("id").limit(50).execute())
     return max(len(rows), 8)

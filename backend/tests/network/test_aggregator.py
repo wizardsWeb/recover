@@ -247,3 +247,31 @@ def test_another_banks_history_is_not_borrowed() -> None:
     stat(db, rate=0.95, size=500, hours_ago=25, hour=hour, bank="HDFC")
 
     assert get_historical_baseline(db, "SBI", "upi", hour) == DEFAULT_BASELINE_RATE
+
+
+def test_a_second_poll_replaces_even_in_the_first_minutes_of_an_hour() -> None:
+    """The boundary the hourly key gets wrong if it is read from the wrong end.
+
+    The window trails the measurement, so at 19:05 a reading covers 18:55-19:05
+    and its `window_start` sits in the previous hour. Keyed on the start, the
+    lookup misses the row it just wrote and inserts another — the overlapping
+    rows this is supposed to prevent, for ten minutes out of every sixty, with
+    the baseline counting the same retries twice.
+    """
+    from app.ml.network.aggregator import _Cell, _write_cell
+
+    db = FakeSupabase()
+    key = ("SBI", "upi", 19, 0)
+    at_19_05 = datetime.now(UTC).replace(hour=19, minute=5, second=0, microsecond=0)
+
+    for successes, trials in ((6.0, 10.0), (18.0, 20.0)):
+        _write_cell(
+            db,
+            key,
+            _Cell(successes=successes, trials=trials),
+            at_19_05 - timedelta(minutes=10),
+            at_19_05,
+        )
+
+    assert len(db.rows("network_stats")) == 1
+    assert db.rows("network_stats")[0]["sample_size"] == 20

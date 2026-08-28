@@ -210,14 +210,20 @@ def _write_cell(
         "updated_at": window_end.isoformat(),
     }
 
+    # Matched on `window_end`, not `window_start`. The window trails the
+    # measurement by `window_minutes`, so during the first ten minutes of any
+    # clock hour a row's own start sits in the *previous* hour — a start-keyed
+    # lookup would miss it and insert a duplicate, which is precisely the
+    # overlapping-rows problem this function exists to prevent, happening for
+    # ten minutes out of every sixty.
     existing = _rows(
         supabase_client.table("network_stats")
-        .select("id, window_start")
+        .select("id, window_end")
         .eq("bank", bank)
         .eq("method", method)
         .eq("hour_of_day", hour)
         .eq("day_of_week", day)
-        .gte("window_start", _hour_floor(window_end).isoformat())
+        .gte("window_end", _hour_floor(window_end).isoformat())
         .limit(1)
         .execute()
     )
