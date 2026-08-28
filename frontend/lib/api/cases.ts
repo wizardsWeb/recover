@@ -119,6 +119,12 @@ export interface CaseCustomer {
 
 export interface CaseDetail extends Omit<CaseListItem, "customers"> {
   diagnosis: Record<string, unknown> | null;
+  /**
+   * Working state the agent accumulates between passes — currently the
+   * promise-to-pay terms. Distinct from the event payload the loop calls
+   * `metadata` internally; see the Phase 7 migration.
+   */
+  metadata: Record<string, unknown> | null;
   customers: CaseCustomer | null;
   audit_events: AuditEvent[];
   agent_decisions: AgentDecision[];
