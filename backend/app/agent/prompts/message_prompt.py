@@ -223,6 +223,7 @@ def build_message_prompt(
     channel: str,
     payment_link_url: str,
     cart_items: str,
+    invoice: dict[str, Any] | None = None,
 ) -> str:
     """Render the message-generation prompt.
 
@@ -231,6 +232,17 @@ def build_message_prompt(
     as their own merchant.
     """
     limit = CHANNEL_LIMITS.get(channel, CHANNEL_LIMITS["whatsapp"])
+    # B2B copy has to be actionable at an accounts-payable desk. A clerk with
+    # forty open invoices cannot act on "your payment is overdue" — they need the
+    # invoice number, what it was for, and how late it is, or the message costs
+    # them a lookup before they can even find it.
+    invoice_lines = ""
+    if invoice:
+        invoice_lines = (
+            f"  invoice_id: {invoice.get('invoice_id', 'unknown')}\n"
+            f"  invoice_description: {invoice.get('invoice_description', 'goods supplied')}\n"
+            f"  days_overdue: {invoice.get('days_overdue', 'unknown')}\n"
+        )
     emoji_rule = "no emoji (SMS)" if channel == "sms" else "emoji allowed, sparingly"
 
     context = f"""\
@@ -248,6 +260,6 @@ Context:
   channel: {channel} (hard limit {limit} characters, {emoji_rule})
   payment_link_url: {payment_link_url}
   cart_items: {cart_items}
-"""
+{invoice_lines}"""
 
     return f"{_INSTRUCTIONS}\n{_FEW_SHOTS}\nNOW WRITE THE MESSAGE.\n\n{context}"

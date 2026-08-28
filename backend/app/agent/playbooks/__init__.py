@@ -10,6 +10,7 @@ which is the kind of bug that only shows up in a compliance audit.
 from collections.abc import Callable
 from typing import Any
 
+from app.agent.models import ActionType
 from app.agent.playbooks.b2b_overdue import B2B_OVERDUE_CONFIG
 from app.agent.playbooks.b2b_overdue import (
     get_default_decision_params as _b2b_overdue_params,
@@ -27,6 +28,55 @@ from app.agent.playbooks.subscription_failure import SUBSCRIPTION_FAILURE_CONFIG
 from app.agent.playbooks.subscription_failure import (
     get_default_decision_params as _subscription_failure_params,
 )
+
+#: Arm name -> the physical action it resolves to.
+#:
+#: NOTE — this diverges from ``bandit_arms.action_type`` in the Phase 2 seed for
+#: the five link-delivery arms below, which the migration types as
+#: ``send_payment_link`` and this map types by delivery channel:
+#:
+#:   whatsapp_payment_link, sms_payment_link, email_payment_link,
+#:   switch_method_upi, whatsapp_payment_link_now
+#:
+#: The bandit can now select any of them, so the two sources of truth are
+#: reachable in the same run. This map wins at runtime because it is what the
+#: guardrail's channel-consent check reads; reconciling the seed is a migration.
+ARM_TO_ACTION_TYPE: dict[str, ActionType] = {
+    "retry_now": ActionType.RETRY_CHARGE,
+    "retry_at_optimal_hour": ActionType.RETRY_CHARGE,
+    "silent_retry_next_morning": ActionType.RETRY_CHARGE,
+    "retry_at_inferred_date": ActionType.RETRY_CHARGE,
+    "retry_at_inferred_date_plus_whatsapp_fallback": ActionType.RETRY_CHARGE,
+    "immediate_retry": ActionType.RETRY_CHARGE,
+    "whatsapp_payment_link": ActionType.SEND_WHATSAPP,
+    "whatsapp_payment_link_now": ActionType.SEND_WHATSAPP,
+    "whatsapp_saved_cart_no_discount": ActionType.SEND_WHATSAPP,
+    "whatsapp_saved_cart_5pct": ActionType.SEND_WHATSAPP,
+    "whatsapp_saved_cart_8pct": ActionType.SEND_WHATSAPP,
+    "whatsapp_saved_cart_12pct": ActionType.SEND_WHATSAPP,
+    "polite_reminder_whatsapp": ActionType.SEND_WHATSAPP,
+    "firm_reminder_whatsapp": ActionType.SEND_WHATSAPP,
+    "firm_reminder_whatsapp_plus_email": ActionType.SEND_WHATSAPP,
+    "partial_payment_offer": ActionType.SEND_PAYMENT_LINK,
+    "payment_plan_offer": ActionType.SEND_PAYMENT_LINK,
+    "sms_payment_link": ActionType.SEND_SMS,
+    "sms_saved_cart": ActionType.SEND_SMS,
+    "email_payment_link": ActionType.SEND_EMAIL,
+    "email_saved_cart": ActionType.SEND_EMAIL,
+    "dunning_email_sequence": ActionType.SEND_EMAIL,
+    # Seeded in the b2b_overdue action space but absent from the Phase 4 spec's
+    # table; without it the arm would silently resolve to no_op.
+    "polite_reminder_email": ActionType.SEND_EMAIL,
+    "switch_method_upi": ActionType.SEND_WHATSAPP,
+    "mandate_reregistration": ActionType.MANDATE_REREGISTER,
+    "human_handoff": ActionType.HUMAN_HANDOFF,
+    "escalate_to_human_ar": ActionType.HUMAN_HANDOFF,
+    "pause_with_winback": ActionType.NO_OP,
+    "accept_promise_to_pay": ActionType.NO_OP,
+    "graduated_b2b_sequence": ActionType.GRADUATED_SEQUENCE,
+    "no_op": ActionType.NO_OP,
+    "suggest_alternate_method": ActionType.SEND_WHATSAPP,
+}
 
 PLAYBOOK_CONFIGS: dict[str, PlaybookConfig] = {
     "failed_payment": FAILED_PAYMENT_CONFIG,
@@ -65,6 +115,7 @@ def get_default_action_params(playbook: str, arm: str) -> dict[str, Any]:
 
 
 __all__ = [
+    "ARM_TO_ACTION_TYPE",
     "B2B_OVERDUE_CONFIG",
     "CHECKOUT_ABANDONMENT_CONFIG",
     "FAILED_PAYMENT_CONFIG",

@@ -45,7 +45,19 @@ TRAI_QUIET_END_HOUR = 9  # 9 AM IST
 #: Actions that put a message in front of a human. Everything TRAI governs, and
 #: everything that needs channel consent, is in this set — a silent retry is
 #: neither a communication nor an interruption.
-MESSAGE_ACTIONS = frozenset({"send_whatsapp", "send_sms", "send_email", "send_payment_link"})
+MESSAGE_ACTIONS = frozenset(
+    {
+        "send_whatsapp",
+        "send_sms",
+        "send_email",
+        "send_payment_link",
+        # A graduated B2B step fans out into one or more real sends. Leaving it
+        # out of this set would let the whole ladder past consent, quiet hours
+        # and the frequency cap, because the guardrail only gates the action
+        # types it recognises as reaching a person.
+        "graduated_sequence",
+    }
+)
 
 
 def _parse_timestamp(value: Any) -> datetime | None:

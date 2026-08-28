@@ -37,6 +37,7 @@ from typing import Any
 from app.agent.guardrail import MESSAGE_ACTIONS
 from app.agent.llm import make_gemini_client
 from app.agent.models import ActionType, ExecutionResult, ExecutionStatus
+from app.agent.playbooks import ARM_TO_ACTION_TYPE, get_default_action_params
 from app.agent.prompts.message_prompt import (
     FALLBACK_MESSAGE,
     MESSAGE_SCHEMA,
@@ -50,6 +51,27 @@ logger = get_logger(__name__)
 # reused rather than restated. They must not drift: an action TRAI governs but
 # that generates no copy would be sent with an empty body, and one that
 # generates copy without being governed would skip the consent check.
+
+#: The B2B escalation ladder: days overdue -> the arms that step fires.
+#:
+#: Read as "up to N days". An invoice does not need the same message on day 3
+#: and day 30, and a single arm that sent the same reminder for six weeks is the
+#: behaviour that trains a customer to ignore it. The ladder is the pattern a
+#: human AR clerk already follows — ask nicely, ask firmly, offer to split it,
+#: then stop automating and pick up the phone.
+#:
+#: The day-6 step deliberately fires on two channels. scenarios.md S4 does the
+#: same ("Simultaneously: email fires with same content, more formal"), and a
+#: B2B contact that has to reach an accounts-payable desk is more likely to land
+#: if it arrives in both places.
+GRADUATED_B2B_LADDER: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (5, ("polite_reminder_whatsapp",)),
+    (12, ("firm_reminder_whatsapp", "email_payment_link")),
+    (20, ("partial_payment_offer",)),
+)
+
+#: Past the last rung, automation stops deciding and a person takes it.
+GRADUATED_B2B_FINAL: tuple[str, ...] = ("escalate_to_human_ar",)
 
 #: LTV boundaries in paise, for the one context feature the prompt takes as a
 #: bucket rather than a number. A model handed "2700000" reasons about the digits;
@@ -127,28 +149,26 @@ async def run_execute(
         else None
     )
 
+    # The B2B ladder is several sends behind one decision, so it writes its own
+    # attempt rows and returns a summary of them.
+    if action_type == ActionType.GRADUATED_SEQUENCE.value:
+        return await _run_graduated_sequence(
+            case, decision, supabase_client, trace_id, idempotency_key, customer, merchant
+        )
+
     adapter, result = await _dispatch(action_type, case, decision, trace_id)
     if message is not None:
         _attach_message(result, message)
 
-    # Write execution attempt. `attempted_at` and `completed_at` are the same
-    # instant because nothing here waits on a network — when real adapters land
-    # they will diverge, and the gap becomes the adapter's latency.
-    now = datetime.now(UTC).isoformat()
-    attempt_row = {
-        "case_id": case["id"],
-        "merchant_id": case["merchant_id"],
-        "decision_id": decision.get("id"),
-        "action_type": action_type,
-        "adapter": adapter,
-        "request_payload": result["request_payload"],
-        "response_payload": result["response_payload"],
-        "status": result["status"],
-        "idempotency_key": idempotency_key,
-        "attempted_at": now,
-        "completed_at": now,
-    }
-    supabase_client.table("execution_attempts").insert(attempt_row).execute()
+    _write_attempt(
+        supabase_client,
+        case,
+        decision,
+        action_type=action_type,
+        adapter=adapter,
+        result=result,
+        idempotency_key=idempotency_key,
+    )
 
     return ExecutionResult(
         action_type=ActionType(action_type),
@@ -202,6 +222,18 @@ def _order_context(case: dict[str, Any], customer: dict[str, Any] | None) -> str
     return str(customer_meta.get("order_contents") or "your order")
 
 
+def _invoice_context(case: dict[str, Any]) -> dict[str, Any] | None:
+    """Invoice fields for the message prompt, or ``None`` for a consumer case."""
+    metadata = case.get("metadata") or {}
+    if case.get("playbook") != "b2b_overdue" or not metadata.get("invoice_id"):
+        return None
+    return {
+        "invoice_id": metadata.get("invoice_id"),
+        "invoice_description": metadata.get("invoice_items"),
+        "days_overdue": days_overdue(case),
+    }
+
+
 async def _generate_message(
     arm_name: str,
     case: dict[str, Any],
@@ -240,6 +272,7 @@ async def _generate_message(
         channel=str(action_params.get("channel") or "whatsapp"),
         payment_link_url="[payment link]",
         cart_items=_order_context(case, customer),
+        invoice=_invoice_context(case),
     )
 
     client = make_gemini_client(supabase_client)
@@ -268,6 +301,162 @@ def _attach_message(result: dict[str, Any], message: dict[str, Any]) -> None:
         # the UI label a neutral template as a template rather than as generated.
         "is_llm_generated": message is not FALLBACK_MESSAGE,
     }
+
+
+def _write_attempt(
+    supabase_client: Any,
+    case: dict[str, Any],
+    decision: dict[str, Any],
+    *,
+    action_type: str,
+    adapter: str,
+    result: dict[str, Any],
+    idempotency_key: str,
+) -> None:
+    """Record one attempt.
+
+    ``attempted_at`` and ``completed_at`` are the same instant because nothing
+    here waits on a network — when real adapters land they will diverge, and the
+    gap becomes the adapter's latency.
+    """
+    now = datetime.now(UTC).isoformat()
+    supabase_client.table("execution_attempts").insert(
+        {
+            "case_id": case["id"],
+            "merchant_id": case["merchant_id"],
+            "decision_id": decision.get("id"),
+            "action_type": action_type,
+            "adapter": adapter,
+            "request_payload": result["request_payload"],
+            "response_payload": result["response_payload"],
+            "status": result["status"],
+            "idempotency_key": idempotency_key,
+            "attempted_at": now,
+            "completed_at": now,
+        }
+    ).execute()
+
+
+def days_overdue(case: dict[str, Any]) -> int:
+    """How late this invoice is.
+
+    Prefers the figure the event carried, because that is the merchant's own
+    ageing calculation and the one on their invoice. Falls back to the time the
+    case has been open, which is the closest thing available when the payload
+    did not say — and never negative, since a ladder cannot run backwards.
+    """
+    metadata = case.get("metadata") or {}
+    stated = metadata.get("days_overdue")
+    if stated is not None:
+        try:
+            return max(0, int(stated))
+        except (TypeError, ValueError):
+            pass
+
+    opened_at = case.get("opened_at")
+    if not opened_at:
+        return 0
+    try:
+        opened = datetime.fromisoformat(str(opened_at))
+    except (TypeError, ValueError):
+        return 0
+    if opened.tzinfo is None:
+        opened = opened.replace(tzinfo=UTC)
+    return max(0, (datetime.now(UTC) - opened).days)
+
+
+def graduated_arms_for(days: int) -> tuple[str, ...]:
+    """The arms this rung of the ladder fires."""
+    for threshold, arms in GRADUATED_B2B_LADDER:
+        if days <= threshold:
+            return arms
+    return GRADUATED_B2B_FINAL
+
+
+async def _run_graduated_sequence(
+    case: dict[str, Any],
+    decision: dict[str, Any],
+    supabase_client: Any,
+    trace_id: str,
+    idempotency_key: str,
+    customer: dict[str, Any] | None,
+    merchant: dict[str, Any] | None,
+) -> ExecutionResult:
+    """Fire every sub-action for this rung, each as its own attempt row.
+
+    One row per send rather than one row for the sequence. The rows are what the
+    TRAI frequency check counts and what the timeline renders, and collapsing
+    three sends into one row would understate both — the merchant's cap would be
+    measured against a third of the messages actually sent.
+
+    Each sub-action gets its own idempotency key, so a retried pass replays none
+    of them rather than replaying the ones that had not been reached yet.
+    """
+    days = days_overdue(case)
+    arms = graduated_arms_for(days)
+    log = logger.bind(case_id=case.get("id"), days_overdue=days)
+
+    sub_actions: list[dict[str, Any]] = []
+    for arm_name in arms:
+        sub_type = ARM_TO_ACTION_TYPE.get(arm_name, ActionType.NO_OP).value
+        sub_decision = {
+            **decision,
+            "chosen_arm": arm_name,
+            "action_type": sub_type,
+            "action_params": {
+                **(decision.get("action_params") or {}),
+                **get_default_action_params("b2b_overdue", arm_name),
+            },
+        }
+
+        message = (
+            await _generate_message(
+                arm_name,
+                case,
+                customer,
+                merchant,
+                sub_decision["action_params"],
+                supabase_client,
+            )
+            if sub_type in MESSAGE_ACTIONS
+            else None
+        )
+
+        adapter, result = await _dispatch(sub_type, case, sub_decision, trace_id)
+        if message is not None:
+            _attach_message(result, message)
+
+        _write_attempt(
+            supabase_client,
+            case,
+            decision,
+            action_type=sub_type,
+            adapter=adapter,
+            result=result,
+            idempotency_key=f"{idempotency_key}:{arm_name}",
+        )
+
+        sub_actions.append(
+            {
+                "arm_name": arm_name,
+                "action_type": sub_type,
+                "adapter": adapter,
+                "status": result["status"],
+                "body": result["request_payload"].get("body"),
+            }
+        )
+
+    log.info("graduated_sequence_complete", arms=list(arms), sub_actions=len(sub_actions))
+
+    return ExecutionResult(
+        action_type=ActionType.GRADUATED_SEQUENCE,
+        adapter="graduated_b2b_sequence",
+        status=ExecutionStatus.SUCCESS,
+        idempotency_key=idempotency_key,
+        request_payload={"days_overdue": days, "arms": list(arms)},
+        response_payload={"sub_actions": sub_actions, "rung": f"{days}d overdue"},
+        simulated=True,
+    )
 
 
 async def _dispatch(
