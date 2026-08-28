@@ -78,6 +78,9 @@ async def run_decide(
                 playbook,
                 context_bucket,
                 config.arms,
+                # Opts this call into a network warm start when nobody has
+                # played this bucket. The reward path deliberately does not.
+                context=context,
             )
             if supabase_client is not None
             else {}
