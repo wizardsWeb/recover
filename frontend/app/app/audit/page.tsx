@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AuditLogEntry } from "@/components/domain/AuditLogEntry";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import type { AuditEvent } from "@/lib/api/cases";
 import { getAuditEvents } from "@/lib/api/cases.server";
 
@@ -41,8 +42,10 @@ export default async function AuditPage() {
           </div>
         ) : (
           <div className="divide-y divide-hairline">
-            {events.map((entry) => (
-              <AuditLogEntry key={entry.id} entry={entry} />
+            {events.map((entry, index) => (
+              <StaggeredItem key={entry.id} index={index} stagger={0.04}>
+                <AuditLogEntry entry={entry} />
+              </StaggeredItem>
             ))}
           </div>
         )}

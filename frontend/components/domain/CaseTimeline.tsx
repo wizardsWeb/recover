@@ -18,6 +18,7 @@ import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan
 import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
 import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
+import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import type {
   AgentDecision,
   AuditEvent,
@@ -491,7 +492,7 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
         }
 
         return (
-          <div key={stepName} className="flex gap-3">
+          <StaggeredItem key={stepName} index={index} className="flex gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${RAIL_STYLES[status]}`}
@@ -560,7 +561,7 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
                 ) : null}
               </StepResultCard>
             </div>
-          </div>
+          </StaggeredItem>
         );
       })}
     </div>

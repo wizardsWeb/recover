@@ -1,5 +1,6 @@
 "use client";
 
+import { useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import type { BanditAlternative } from "@/lib/api/cases";
@@ -39,6 +40,7 @@ function armLabel(arm: string): string {
 
 export function BanditAlternativesFan({ alternatives, banditMode, contextBucket }: Props) {
   const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   // One frame after mount, so the transition has a zero-width start state to
   // animate away from. Setting the final width on the first paint would render
@@ -78,7 +80,9 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
 
               <div className="h-2 flex-1 overflow-hidden rounded-4xl bg-inset">
                 <div
-                  className={`h-full min-w-[2px] rounded-4xl transition-[width] duration-300 ease-out ${
+                  className={`h-full min-w-[2px] rounded-4xl ${
+                    prefersReducedMotion ? "" : "transition-[width] duration-300 ease-out"
+                  } ${
                     alt.chosen
                       ? "bg-brand"
                       : alt.is_cold
@@ -86,8 +90,10 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
                         : "bg-ink-faint/40"
                   }`}
                   style={{
-                    width: mounted ? `${pct}%` : "0%",
-                    transitionDelay: `${index * STAGGER_MS}ms`,
+                    width: mounted || prefersReducedMotion ? `${pct}%` : "0%",
+                    transitionDelay: prefersReducedMotion
+                      ? undefined
+                      : `${index * STAGGER_MS}ms`,
                   }}
                 />
               </div>
