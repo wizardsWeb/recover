@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
@@ -108,6 +109,9 @@ export function CasesRealtimeUpdater({
                 Status
               </TableHead>
               <TableHead className="text-xs font-medium text-ink-faint">
+                Uplift
+              </TableHead>
+              <TableHead className="text-xs font-medium text-ink-faint">
                 Customer
               </TableHead>
               <TableHead className="text-xs font-medium text-ink-faint">
@@ -138,6 +142,12 @@ export function CasesRealtimeUpdater({
               >
                 <TableCell>
                   <CaseStatusBadge status={row.status} />
+                </TableCell>
+                <TableCell>
+                  {/* Informational, never a control. The bucket explains what
+                    the agent expected to change by acting; it does not gate
+                    anything the merchant can do to this case. */}
+                  <UpliftBucketBadge bucket={row.uplift_bucket} />
                 </TableCell>
                 <TableCell className="text-sm font-medium text-ink">
                   {/* The link lives on the name and the arrow rather than on the

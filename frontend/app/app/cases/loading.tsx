@@ -32,6 +32,7 @@ export default function CasesLoading() {
           <TableHeader>
             <TableRow className="border-hairline">
               <TableHead className="text-xs font-medium text-ink-faint">Status</TableHead>
+              <TableHead className="text-xs font-medium text-ink-faint">Uplift</TableHead>
               <TableHead className="text-xs font-medium text-ink-faint">Customer</TableHead>
               <TableHead className="text-xs font-medium text-ink-faint">Playbook</TableHead>
               <TableHead className="text-right text-xs font-medium text-ink-faint">
@@ -50,6 +51,9 @@ export default function CasesLoading() {
               <TableRow key={row} className="border-hairline">
                 <TableCell>
                   <Skeleton className="h-5 w-20 rounded-4xl" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-24 rounded-4xl" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-32" />

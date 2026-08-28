@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
 import { CaseTimeline } from "@/components/domain/CaseTimeline";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
+import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CaseDetail } from "@/lib/api/cases";
@@ -34,6 +35,7 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
         actions={
           <div className="flex items-center gap-2">
             <CaseStatusBadge status={caseDetail.status} />
+            <UpliftBucketBadge bucket={caseDetail.uplift_bucket} />
             <PlaybookBadge playbook={caseDetail.playbook} />
             <span className="font-mono text-sm text-ink-muted">
               {formatINR(caseDetail.amount_at_risk_cents)} at risk
