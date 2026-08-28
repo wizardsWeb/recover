@@ -21,7 +21,7 @@ const LABELS: Record<Theme, string> = {
   system: "System theme",
 };
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string } = {}) {
   const { theme, setTheme } = useTheme();
   // The server has no idea which theme the browser will resolve to, so the icon
   // is held back until after hydration rather than flashing the wrong one.
@@ -39,6 +39,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
+      className={className}
       onClick={cycle}
       aria-label={`${LABELS[current]}. Click to change.`}
       title={LABELS[current]}
