@@ -55,6 +55,7 @@ from app.agent.models import (
     GuardrailResult,
     ListenResult,
     Playbook,
+    ReplyIntent,
     StepName,
     UpliftVerdict,
 )
@@ -592,7 +593,89 @@ async def _run_listen_stage(
             ("Customer confirmed churn — recovery stopped, handoff to retention team"),
         )
 
+    if listen.intent is ReplyIntent.PROMISE_TO_PAY:
+        await handle_promise_to_pay(supabase_client, case_id, listen, merchant_id, trace_id)
+
     return listen, CaseStatus.IN_FLIGHT, None
+
+
+async def handle_promise_to_pay(
+    supabase_client: Any,
+    case_id: str,
+    listen: ListenResult,
+    merchant_id: str,
+    trace_id: str,
+) -> None:
+    """Record a promise and stand down, without closing the case.
+
+    A promise is the one reply that is neither a stop nor an outcome. The
+    customer has not paid, so there is nothing to reward; they have not refused,
+    so there is nothing to close. Treating it as either is wrong in an expensive
+    direction — closing it recovered books money that has not arrived, and
+    closing it stopped abandons a customer who just said they would pay.
+
+    So the case stays ``in_flight`` with its terms recorded, and ``current_step``
+    becomes ``awaiting_promise`` — which is what stops the next pass reading a
+    quiet case as one that needs chasing again.
+    """
+    entities = listen.extracted_entities or {}
+    promise = {
+        "date_hint": entities.get("promise_date_hint"),
+        "partial_pct": entities.get("partial_pct"),
+        "amount_mentioned": entities.get("amount_mentioned"),
+        "reason_offered": entities.get("reason_offered"),
+        "promised_at": datetime.now(UTC).isoformat(),
+        "raw_reply": listen.raw_text,
+        "reply_id": listen.reply_id,
+    }
+
+    # Merged, not replaced: `metadata` is shared working state, and a later
+    # phase writing holdout or uplift fields must not lose them to this update.
+    existing = await _fetch_case_metadata(supabase_client, case_id)
+    _update_case(
+        supabase_client,
+        case_id,
+        {
+            "metadata": {**existing, "promise_to_pay": promise},
+            "status": CaseStatus.IN_FLIGHT.value,
+            "current_step": "awaiting_promise",
+        },
+    )
+
+    await audit.log_agent_step(
+        supabase_client,
+        case_id,
+        merchant_id,
+        "listen",
+        "agent",
+        "promise_tracked",
+        promise,
+        trace_id,
+    )
+    logger.info(
+        "promise_to_pay_tracked",
+        case_id=case_id,
+        date_hint=promise["date_hint"],
+        partial_pct=promise["partial_pct"],
+        trace_id=trace_id,
+    )
+
+
+async def _fetch_case_metadata(supabase_client: Any, case_id: str) -> dict[str, Any]:
+    """The case's stored metadata, or ``{}`` if it cannot be read."""
+    try:
+        resp = (
+            supabase_client.table("recovery_cases")
+            .select("metadata")
+            .eq("id", case_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    if not resp.data:
+        return {}
+    return dict(resp.data[0].get("metadata") or {})
 
 
 async def _hear_pending_reply(
@@ -776,8 +859,15 @@ def _enrich_case(
 ) -> dict[str, Any]:
     """Build the case dict the steps actually consume.
 
-    The ``recovery_cases`` row has no ``metadata`` column and no contact
-    details, but the guardrail's network-alert check needs the bank and method,
+    **Note the name collision.** ``recovery_cases`` now *does* have a
+    ``metadata`` column — Phase 7 added it for promise tracking — and this
+    function overwrites that key with the trigger event's payload. Inside a
+    pass, ``case["metadata"]`` means the event payload; on the row it means the
+    agent's stored working state. Anything that needs the stored version reads
+    it back with ``_fetch_case_metadata`` rather than trusting this dict.
+
+    The row has no contact details either, but the guardrail's network-alert
+    check needs the bank and method,
     and the execute adapters need a phone number. Both live on the trigger event
     payload and the customer row, so they are merged in here — once, in the
     orchestrator — rather than having five steps each learn where to look.
