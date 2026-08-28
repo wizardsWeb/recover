@@ -43,9 +43,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.agent import audit
+from app.agent.bandit.context import extract_context_vector
 from app.agent.bandit.reward import post_reward
 from app.agent.guardrail import run_guardrail
 from app.agent.handoff import create_handoff_attempt
+from app.agent.holdout import HOLDOUT_RATE, assign_holdout, should_hold_out
 from app.agent.models import (
     ActionType,
     AgentLoopResult,
@@ -175,6 +177,49 @@ async def run_agent_loop(
             trace_id,
         )
         log.info("step_detect_complete", playbook=playbook)
+
+        # ── HOLDOUT ────────────────────────────────────────────────────
+        # The control group is chosen here, before anything has been decided or
+        # sent, and only on the pass that opened the case. A case that is
+        # already in flight has been acted on, and acting on a control is what
+        # makes it stop being one.
+        #
+        # The context vector is extracted once and reused: the uplift check
+        # needs it, and freezing it here means the holdout row records the
+        # conditions the case actually arrived under rather than the conditions
+        # at training time.
+        context_features = extract_context_vector(case, customer, event)
+        if should_hold_out(case):
+            await assign_holdout(supabase_client, case_id, merchant_id, context_features)
+            await audit.log_agent_step(
+                supabase_client,
+                case_id,
+                merchant_id,
+                "detect",
+                "system",
+                "assigned_to_holdout",
+                {
+                    "holdout_rate": HOLDOUT_RATE,
+                    "context_features": context_features,
+                    "reason": (
+                        "Control group — no intervention, so the outcome measures what "
+                        "would have happened anyway."
+                    ),
+                },
+                trace_id,
+            )
+            steps_completed.append(StepName.AUDIT)
+            log.info("case_assigned_to_holdout")
+            # No reward is posted and no arm is pulled. `post_reward` also
+            # refuses holdouts, but the case never reaches it: a control that
+            # taught the bandit would be a control that changed the policy.
+            return AgentLoopResult(
+                case_id=case_id,
+                trace_id=trace_id,
+                playbook=playbook_enum,
+                steps_completed=steps_completed,
+                final_status=CaseStatus.HOLDOUT,
+            )
 
         # ── STEP 2: DIAGNOSE ───────────────────────────────────────────
         # Gemini extracts the root cause; the playbook stub answers if it can't.

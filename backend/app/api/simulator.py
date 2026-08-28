@@ -16,6 +16,7 @@ and keeps snake_case in Python, so the frontend's types read the same as
 ``Merchant``'s do.
 """
 
+from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 import structlog
@@ -188,6 +189,18 @@ class SimulatorStatusResponse(CamelModel):
     fixtures_loaded: bool
     recent_events: list[RecentEvent]
     in_flight_cases: list[InFlightCase]
+
+
+class HoldoutResolveRequest(CamelModel):
+    case_id: str
+    outcome: str = Field(pattern="^(recovered|not_recovered)$")
+    amount_cents: int = Field(default=0, ge=0)
+
+
+class HoldoutResolveResponse(CamelModel):
+    case_id: str
+    outcome: str
+    amount_cents: int
 
 
 # ---------------------------------------------------------------------------
@@ -478,4 +491,68 @@ def simulator_status(user_id: CurrentUserId, supabase: UserSupabase) -> Simulato
             )
             for row in _rows(cases)
         ],
+    )
+
+
+@router.post("/holdout/resolve", response_model=HoldoutResolveResponse)
+def resolve_holdout(
+    payload: HoldoutResolveRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> HoldoutResolveResponse:
+    """Record what happened to a control case.
+
+    In production this is not an endpoint at all — a holdout's outcome is
+    observed, by a payment arriving or failing to. There is nothing to observe
+    in a simulator, so the outcome is stated instead. It is the only way to
+    produce a trained model for the demo, and it is why this lives behind the
+    dev-environment gate with the rest of the fabrication tools.
+
+    The case row is updated alongside the holdout row. A recovered control still
+    recovered money, and the ROI page's treated-versus-control comparison reads
+    recovery from the case table for both groups — leaving the case at zero
+    would make every control look like a failure and inflate measured uplift.
+    """
+    holdout = (
+        supabase.table("uplift_holdouts")
+        .select("id, case_id")
+        .eq("case_id", payload.case_id)
+        .limit(1)
+        .execute()
+    )
+    if not _rows(holdout):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No holdout row for that case. Only control cases have outcomes to set.",
+        )
+
+    recovered = payload.outcome == "recovered"
+    now = datetime.now(UTC).isoformat()
+
+    supabase.table("uplift_holdouts").update(
+        {
+            "outcome": payload.outcome,
+            "outcome_amount_cents": payload.amount_cents if recovered else 0,
+            "updated_at": now,
+        }
+    ).eq("case_id", payload.case_id).execute()
+
+    supabase.table("recovery_cases").update(
+        {
+            "amount_recovered_cents": payload.amount_cents if recovered else 0,
+            "closed_at": now,
+            "updated_at": now,
+        }
+    ).eq("id", payload.case_id).execute()
+
+    log.info(
+        "holdout_resolved",
+        case_id=payload.case_id,
+        outcome=payload.outcome,
+        amount_cents=payload.amount_cents,
+    )
+    return HoldoutResolveResponse(
+        case_id=payload.case_id,
+        outcome=payload.outcome,
+        amount_cents=payload.amount_cents if recovered else 0,
     )
