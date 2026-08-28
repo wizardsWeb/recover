@@ -22,7 +22,7 @@ const NOTIFICATION_COUNT = 0;
 
 export function Header({ email, businessName }: HeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-hairline bg-elevated px-6">
+    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-hairline bg-elevated px-6 print:hidden">
       <Breadcrumbs />
 
       <div className="mx-auto hidden w-full max-w-md md:block">

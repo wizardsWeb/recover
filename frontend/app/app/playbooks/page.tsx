@@ -104,7 +104,7 @@ export default async function PlaybooksPage() {
         subtitle="How the agent responds to each kind of leak"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {playbooks.map((playbook) => (
           <PlaybookCard key={playbook.slug} playbook={playbook} />
         ))}

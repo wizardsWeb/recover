@@ -327,3 +327,70 @@
     }
   }
 }
+
+/* ===========================================================================
+   Print — the case detail as an audit report
+   ---------------------------------------------------------------------------
+   The shell's chrome is hidden by `print:hidden` at the component level; this
+   handles what a utility class cannot.
+
+   The light palette is re-asserted for `.dark` too. A printer does not paint
+   the page background, so printing from dark mode would put near-white ink on
+   white paper — a blank sheet where the audit trail should be. Forcing the
+   light tokens is the difference between a readable report and an empty one.
+
+   Fills are dropped and borders kept, so a status chip still reads as a chip
+   without spending a merchant's toner on a solid block of colour.
+   =========================================================================== */
+
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+
+    --bg-base: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-subtle: #ffffff;
+    --bg-inset: #ffffff;
+
+    --border-subtle: #b8b2a6;
+    --border-strong: #8a8175;
+
+    --text-primary: #000000;
+    --text-secondary: #2b2721;
+    --text-tertiary: #4a453c;
+
+    --brand: #6b4f10;
+    --success: #14532d;
+    --warning: #713f12;
+    --danger: #7f1d1d;
+    --info: #1e3a8a;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  /* No filled surfaces on paper — outlines and text carry the structure. */
+  *,
+  *::before,
+  *::after {
+    background-image: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  [class*="bg-"] {
+    background-color: transparent !important;
+  }
+
+  /* Chips lose their fill, so they need an outline to stay chips. */
+  [class*="rounded-4xl"] {
+    border: 1px solid var(--border-strong) !important;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}

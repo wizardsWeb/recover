@@ -71,7 +71,7 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
           return (
             <div key={alt.arm_name} className="flex items-center gap-2" title={tooltip}>
               <span
-                className={`w-[180px] shrink-0 truncate font-mono text-[11px] ${
+                className={`w-[110px] shrink-0 truncate xl:w-[180px] font-mono text-[11px] ${
                   alt.chosen ? "font-semibold text-ink" : "text-ink-faint"
                 }`}
               >

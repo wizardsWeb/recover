@@ -17,7 +17,7 @@ export default function PlaybooksLoading() {
         <Skeleton className="h-4 w-56" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {CARDS.map((card) => (
           <div key={card} className="rounded-lg border border-hairline p-4">
             <div className="flex items-start gap-3">

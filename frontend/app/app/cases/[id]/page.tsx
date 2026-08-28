@@ -47,7 +47,7 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
         }
       />
 
-      <div className="mt-6 grid grid-cols-[1fr_320px] gap-6">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div>
           <h2 className="mb-4 text-sm font-semibold tracking-wider text-ink-muted uppercase">
             Agent Steps
@@ -95,8 +95,9 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
 
           {/* Rendered for every case, closed ones included. `CaseActions`
               disables itself once a case is terminal, so the panel does not
-              vanish out from under a reader the moment the agent closes it. */}
-          <Card className="border-hairline">
+              vanish out from under a reader the moment the agent closes it.
+              Dropped on print: a button is not an audit record. */}
+          <Card className="border-hairline print:hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
             </CardHeader>
