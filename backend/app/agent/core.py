@@ -70,6 +70,7 @@ from app.agent.steps.learn import run_learn
 from app.agent.steps.listen import run_listen
 from app.agent.steps.uplift_check import run_uplift_check
 from app.logging import get_logger
+from app.ml.uplift.training import schedule_retrain
 
 logger = get_logger(__name__)
 
@@ -532,6 +533,12 @@ async def run_agent_loop(
             await _post_close_reward(supabase_client, case, final_status, trace_id)
 
         _mark_event_processed(supabase_client, event)
+
+        # The uplift model refits in the background once enough new outcomes
+        # have landed. Fired after the pass is otherwise finished and never
+        # awaited: a model refit is a reporting concern, and the recovery this
+        # pass performed must not wait on it or be undone by it failing.
+        schedule_retrain(supabase_client, merchant_id, playbook)
 
         log.info(
             "agent_loop_complete",
