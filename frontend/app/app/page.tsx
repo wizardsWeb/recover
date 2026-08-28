@@ -5,10 +5,15 @@ import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { FirstTimeDashboard } from "@/components/empty-states/FirstTimeDashboard";
 import { PageHeader } from "@/components/shell/PageHeader";
+import {
+  AnimatedINR,
+  AnimatedNumber,
+  AnimatedPercent,
+} from "@/components/ui/AnimatedNumber";
 import { Card, CardContent } from "@/components/ui/card";
 import type { CaseListItem, Overview } from "@/lib/api/cases";
 import { getCases, getOverview } from "@/lib/api/cases.server";
-import { formatINR, formatPercent } from "@/lib/utils/format";
+import { formatINR } from "@/lib/utils/format";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -42,28 +47,40 @@ export default async function DashboardPage() {
     );
   }
 
-  const kpis = [
+  // `kind` rather than a `format` callback: these tiles are rendered by a
+  // server component, and a function cannot cross the server/client boundary.
+  const kpis: Array<{
+    label: string;
+    value: number;
+    kind: "inr" | "count" | "percent";
+    className: string;
+    surface: string;
+  }> = [
     {
       label: "At Risk Today",
-      value: formatINR(overview.amount_at_risk_today_cents),
+      value: overview.amount_at_risk_today_cents,
+      kind: "inr",
       className: "text-warning",
       surface: "bg-warning-subtle",
     },
     {
       label: "Recovered Today",
-      value: formatINR(overview.amount_recovered_today_cents),
+      value: overview.amount_recovered_today_cents,
+      kind: "inr",
       className: "text-success",
       surface: "bg-success-subtle",
     },
     {
       label: "Cases In Flight",
-      value: String(overview.cases_in_flight),
+      value: overview.cases_in_flight,
+      kind: "count",
       className: "text-info",
       surface: "bg-info-subtle",
     },
     {
       label: "Recovery Rate",
-      value: formatPercent(overview.recovery_rate_today),
+      value: overview.recovery_rate_today,
+      kind: "percent",
       className: "text-brand",
       surface: "bg-brand-subtle",
     },
@@ -81,7 +98,13 @@ export default async function DashboardPage() {
               <div
                 className={`font-display text-3xl font-semibold tracking-tight ${kpi.className}`}
               >
-                {kpi.value}
+                {kpi.kind === "inr" ? (
+                  <AnimatedINR value={kpi.value} />
+                ) : kpi.kind === "percent" ? (
+                  <AnimatedPercent value={kpi.value} />
+                ) : (
+                  <AnimatedNumber value={kpi.value} />
+                )}
               </div>
             </CardContent>
           </Card>
