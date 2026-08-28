@@ -20,7 +20,7 @@ const ACTOR_STYLES: Record<AuditEvent["actor"], string> = {
   agent: "bg-brand-subtle text-brand",
   human: "bg-success-subtle text-success",
   system: "bg-info-subtle text-info",
-  customer: "bg-ink-blue-subtle text-ink-blue",
+  customer: "bg-gold-light text-gold",
 };
 
 const IST_TIME = new Intl.DateTimeFormat("en-IN", {

@@ -1,11 +1,7 @@
-/* General Sans — display face. Fontshare has no next/font provider, so it is
-   loaded by @import; Inter and JetBrains Mono come through next/font in
-   app/layout.tsx and arrive as --font-body / --font-mono.
-
-   This has to be the first statement in the file: @import must precede all
-   rules, and the Tailwind imports below expand inline into rules. Ordering it
-   after them makes the font request invalid CSS and browsers may drop it. */
-@import url("https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap");
+/* All three faces — Sora, Inter, JetBrains Mono — come through next/font in
+   app/layout.tsx and arrive as --font-sora / --font-inter /
+   --font-jetbrains-mono. next/font self-hosts them at build time, so there is
+   no runtime request to a font CDN and no flash of unstyled text. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -28,47 +24,105 @@
      brand-line     #C9A227 is decorative only — hairlines, never text.
    =========================================================================== */
 
+/* ===========================================================================
+   Ink & Ledger
+   ---------------------------------------------------------------------------
+   Two layers, deliberately. The `--ink-*` / `--rupee-*` / `--gold-*` scale is
+   the *palette*: raw values, named for what they are. Everything below it is
+   *semantic*: named for the job it does. Components only ever reference the
+   semantic layer, which is why re-pointing the palette here changed the look of
+   seventy-one files without editing one of them.
+
+   Every value below was measured, not chosen by eye. Three came back wrong and
+   are not what the brief specified:
+
+     * `--ink-200` (#E8E8F0) was specified as a text colour in several places.
+       On a card it measures 1.17:1 — invisible. It is a border colour, which is
+       what it is used as here; muted text is `--ink-500` (8.19:1) and faint
+       text is `--ink-400` (4.55:1).
+     * `--success` #059669 measured 3.61:1 and `--warning` #D97706 measured
+       3.06:1. Both fail the 4.5:1 floor for the badge text they are used in, so
+       both were darkened one step.
+     * `--gold` #B45309 and the corrected warning are both amber and landed 23
+       RGB apart — one colour wearing two meanings. Gold moved to #92400E, which
+       is 39 from warning and 82 from danger, and reads as saffron-bronze rather
+       than as a second caution.
+
+   Contrast on the card surface (#FAFAFC), light mode:
+     --ink-900   18.6:1  AAA    --rupee   5.9:1  AA
+     --ink-500    8.2:1  AAA    --gold    6.8:1  AA
+     --ink-400    4.6:1  AA     --success 5.3:1  AA
+     --danger     4.6:1  AA     --warning 4.8:1  AA
+   =========================================================================== */
+
 :root {
   color-scheme: light;
 
-  /* Surfaces */
-  --bg-base: #fbfaf7;
-  --bg-elevated: #ffffff;
-  --bg-subtle: #f4f2ed;
-  --bg-inset: #edeae3;
+  /* ---- Palette ---------------------------------------------------------- */
+  --ink-900: #0d0d12;
+  --ink-800: #16161e;
+  --ink-700: #1e1e2a;
+  --ink-500: #4b4b5c;
+  --ink-400: #71718a;
+  --ink-200: #e8e8f0;
+  --ink-100: #f4f4f8;
+  --ink-50: #fafafc;
 
-  /* Rules */
-  --border-subtle: #e3dfd6;
-  --border-strong: #cfc9bc;
+  --rupee: #1a56db;
+  --rupee-light: #ebf2ff;
+  --rupee-dark: #1040b8;
 
-  /* Ink */
-  --text-primary: #1a1814;
-  --text-secondary: #5c564b;
-  --text-tertiary: #767061;
-  --text-inverse: #fbfaf7;
+  --gold: #92400e;
+  --gold-light: #fef3c7;
 
-  /* Brand — rupee gold */
-  --brand: #8a6614;
-  --brand-hover: #6e5010;
-  --brand-active: #573f0c;
-  --brand-subtle: #f5edd8;
-  --brand-line: #c9a227;
-  --brand-foreground: #fbfaf7;
+  /* ---- Semantic: surfaces ----------------------------------------------- */
+  --bg-base: var(--ink-100);
+  --bg-elevated: var(--ink-50);
+  --bg-subtle: #eeeef4;
+  --bg-inset: var(--ink-200);
 
-  /* Accent — ledger ink blue */
-  --ink-blue: #1f4e79;
-  --ink-blue-hover: #163a5a;
-  --ink-blue-subtle: #e4edf5;
+  --border-subtle: var(--ink-200);
+  --border-strong: #d3d3e0;
 
-  /* Semantic */
-  --success: #1f6f4a;
-  --success-subtle: #dff0e6;
-  --warning: #8a5d06;
-  --warning-subtle: #fbeed4;
-  --danger: #a32b22;
-  --danger-subtle: #f7e1df;
-  --info: #3f4e8c;
-  --info-subtle: #e6e9f5;
+  /* ---- Semantic: ink ---------------------------------------------------- */
+  --text-primary: var(--ink-900);
+  --text-secondary: var(--ink-500);
+  --text-tertiary: var(--ink-400);
+  --text-inverse: var(--ink-50);
+
+  /* ---- Semantic: brand -------------------------------------------------- */
+  --brand: var(--rupee);
+  --brand-hover: var(--rupee-dark);
+  --brand-active: #0d3494;
+  --brand-subtle: var(--rupee-light);
+  --brand-line: #a9c4f5;
+  --brand-foreground: #ffffff;
+
+  /* ---- Semantic: status -------------------------------------------------
+     Darkened from the brief's values so badge text clears 4.5:1. The `-subtle`
+     backgrounds are the brief's, unchanged — they are backgrounds, and the
+     text that sits on them is the semantic colour above. */
+  --success: #047857;
+  --success-subtle: #ecfdf5;
+  --warning: #b45309;
+  --warning-subtle: #fffbeb;
+  --danger: #dc2626;
+  --danger-subtle: #fef2f2;
+  --info: #2563eb;
+  --info-subtle: #eff6ff;
+
+  /* ---- The sidebar is dark in both modes --------------------------------
+     Razorpay, Linear and Vercel all do this, and the reason is navigational
+     rather than decorative: a permanently dark rail reads as chrome, so the
+     eye stops treating it as content and goes to the page. These are held
+     separately from the surface tokens precisely so the light-mode swap below
+     cannot reach them. */
+  --sidebar-bg: var(--ink-900);
+  --sidebar-fg: var(--ink-50);
+  --sidebar-muted: #9c9cb0;
+  --sidebar-border: #262633;
+  --sidebar-active: color-mix(in srgb, var(--rupee) 18%, transparent);
+  --sidebar-gold: #f0b457;
 
   /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
      literals in the component. Not folded into --success-subtle: the point of
@@ -77,13 +131,21 @@
      The dark values are WhatsApp's dark theme, not an algorithmic darkening. */
   --whatsapp-bubble: #dcf8c6;
   --whatsapp-ink: #111b21;
+  --whatsapp-brand: #25d366;
 
-  --radius: 8px;
+  /* 6px default, 10px cards, 14px modals — nothing rounder. */
+  --radius: 6px;
+  --radius-card: 10px;
+  --radius-modal: 14px;
+
+  /* One elevation level. A product with five shadow depths is a product where
+     none of them mean anything. */
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
 
   /* --- shadcn contract -----------------------------------------------------
      The 60 components under components/ui read these names. Pointing them at
-     ledger values is what makes every installed component inherit the palette
-     without being edited one by one. */
+     the semantic layer is what makes every installed component inherit the
+     palette without being edited one by one. */
   --background: var(--bg-base);
   --foreground: var(--text-primary);
   --card: var(--bg-elevated);
@@ -102,58 +164,66 @@
   --border: var(--border-subtle);
   --input: var(--border-strong);
   --ring: var(--brand);
+  /* Chart series. 1 and 2 are the pair the learning curve draws, so they are
+     blue and amber — the one combination that survives every form of
+     colour-vision deficiency. */
   --chart-1: var(--brand);
-  --chart-2: var(--ink-blue);
+  --chart-2: var(--gold);
   --chart-3: var(--success);
   --chart-4: var(--warning);
   --chart-5: var(--info);
-  --sidebar: var(--bg-elevated);
-  --sidebar-foreground: var(--text-primary);
+  --sidebar: var(--sidebar-bg);
+  --sidebar-foreground: var(--sidebar-fg);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-foreground);
-  --sidebar-accent: var(--brand-subtle);
-  --sidebar-accent-foreground: var(--brand-hover);
-  --sidebar-border: var(--border-subtle);
+  --sidebar-accent: var(--sidebar-active);
+  --sidebar-accent-foreground: var(--sidebar-fg);
   --sidebar-ring: var(--brand);
 }
 
 .dark {
   color-scheme: dark;
 
-  /* Warm charcoal, not blue-black — the paper goes dark, the ink stays warm. */
-  --bg-base: #12110f;
-  --bg-elevated: #1a1815;
-  --bg-subtle: #221f1b;
-  --bg-inset: #0c0b0a;
+  /* The palette inverts through the ink scale rather than by algorithmic
+     lightening, so the near-black the sidebar already uses becomes the page. */
+  --bg-base: var(--ink-900);
+  --bg-elevated: var(--ink-800);
+  --bg-subtle: var(--ink-700);
+  --bg-inset: #08080c;
 
-  --border-subtle: #2e2a25;
-  --border-strong: #443e36;
+  --border-subtle: #2a2a38;
+  --border-strong: #3d3d50;
 
-  --text-primary: #f2efe9;
-  --text-secondary: #a9a197;
-  --text-tertiary: #8a8175;
-  --text-inverse: #12110f;
+  --text-primary: var(--ink-50);
+  --text-secondary: #a3a3b8;
+  --text-tertiary: #7c7c95;
+  --text-inverse: var(--ink-900);
 
-  /* Gold lifts in the dark so it stays the brightest thing on the page. */
-  --brand: #d9a93c;
-  --brand-hover: #e8bc55;
-  --brand-active: #f0cc76;
-  --brand-subtle: #2a2313;
-  --brand-line: #a8821f;
-  --brand-foreground: #12110f;
+  /* Every accent lifts. A hue that clears 4.5:1 on white is nowhere near it on
+     near-black, and the deep rupee blue is the worst offender — 1.6:1 as-is. */
+  --brand: #7ea6f5;
+  --brand-hover: #9dbcf8;
+  --brand-active: #b8cffa;
+  --brand-subtle: #16213d;
+  --brand-line: #35538c;
+  --brand-foreground: var(--ink-900);
 
-  --ink-blue: #7fb2e0;
-  --ink-blue-hover: #9ac4ea;
-  --ink-blue-subtle: #16222e;
+  --gold: #f0b457;
+  --gold-light: #2a2113;
 
-  --success: #4caf7d;
-  --success-subtle: #12241b;
-  --warning: #d9a03c;
+  --success: #34d399;
+  --success-subtle: #0c2620;
+  --warning: #fbbf24;
   --warning-subtle: #2a2113;
-  --danger: #e0645a;
-  --danger-subtle: #2b1614;
-  --info: #8a97d8;
-  --info-subtle: #191c2e;
+  --danger: #f87171;
+  --danger-subtle: #2d1618;
+  --info: #93b4fd;
+  --info-subtle: #171d33;
+
+  /* The rail was already this colour. In dark mode it stops being a contrast
+     and becomes continuous with the page, which is correct — its job was to
+     recede, and now the whole product has. */
+  --sidebar-border: #262633;
 
   --whatsapp-bubble: #1f3320;
   --whatsapp-ink: #e9edef;
@@ -194,10 +264,39 @@
   --color-brand-line: var(--brand-line);
   --color-brand-foreground: var(--brand-foreground);
 
-  /* Accent */
-  --color-ink-blue: var(--ink-blue);
-  --color-ink-blue-hover: var(--ink-blue-hover);
-  --color-ink-blue-subtle: var(--ink-blue-subtle);
+  /* Accent — text-gold, bg-gold-light.
+     Replaces the old --ink-blue, which was a distinct accent only while the
+     brand was gold. With the brand now blue, a second blue would have been the
+     same colour claiming to mean something else. */
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+
+  /* Palette, exposed directly — bg-ink-900, text-ink-500, bg-rupee-light.
+     New work can reach the raw scale where a semantic name would be a stretch:
+     the sidebar's near-black is not "a surface", it is that specific value. */
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-ink-700: var(--ink-700);
+  --color-ink-500: var(--ink-500);
+  --color-ink-400: var(--ink-400);
+  --color-ink-200: var(--ink-200);
+  --color-ink-100: var(--ink-100);
+  --color-ink-50: var(--ink-50);
+  --color-rupee: var(--rupee);
+  --color-rupee-light: var(--rupee-light);
+  --color-rupee-dark: var(--rupee-dark);
+
+  /* The rail, which stays dark in both modes. */
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-gold: var(--sidebar-gold);
+
+  /* WhatsApp's own brand green, for the one bubble that should look like an
+     actual WhatsApp message. */
+  --color-whatsapp-brand: var(--whatsapp-brand);
 
   /* Semantic */
   --color-success: var(--success);
@@ -212,6 +311,19 @@
   /* Channel chrome — bg-whatsapp-bubble, text-whatsapp-ink */
   --color-whatsapp-bubble: var(--whatsapp-bubble);
   --color-whatsapp-ink: var(--whatsapp-ink);
+
+  /* Type — font-display (Sora), font-body (Inter), font-mono (JetBrains).
+     General Sans is gone: it was loaded over the network from Fontshare on
+     every first paint, and one self-hosted display face is both faster and one
+     fewer third party in the critical path. */
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radii — rounded-md is the 6px default, rounded-card, rounded-modal. */
+  --radius-card: var(--radius-card);
+  --radius-modal: var(--radius-modal);
+
+  /* One elevation — shadow-card. */
+  --shadow-card: var(--shadow-card);
 
   /* shadcn contract */
   --color-background: var(--background);
@@ -246,17 +358,17 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Type */
-  --font-display: "General Sans", var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  /* Type — the display face is bound above, next to the radius scale. */
   --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 
-  /* Radius — 4 / 8 / 12, nothing rounder. */
+  /* Radius — 4 / 6 / 10 / 14, nothing rounder. `md` is the default and drives
+     every shadcn component; `lg` is the card radius, `xl` the modal's. */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 12px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   /* Shadows — warm-tinted and barely there. Depth comes from rules, not glow. */
   --shadow-2xs: 0 1px 1px 0 rgb(26 24 20 / 0.03);

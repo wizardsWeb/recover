@@ -8,7 +8,7 @@
  * algorithm, and a fixture cannot be wrong — so it could not be evidence
  * either. This one is fed by a run that just happened.
  *
- * **Colour.** Bandit is `--brand`; the baseline is `--ink-blue`, not the muted
+ * **Colour.** Bandit is `--brand`; the baseline is `--gold`, not the muted
  * grey it might seem to deserve. Against this design system's gold, that grey
  * measures ΔE 8.0 for *normal* colour vision — below the readability floor,
  * before considering colour-vision deficiency at all. Identity never rests on
@@ -39,7 +39,7 @@ import type { BatchWindow } from "@/lib/api/batch";
 import { formatPercent } from "@/lib/utils/format";
 
 const BANDIT_COLOR = "var(--brand)";
-const BASELINE_COLOR = "var(--ink-blue)";
+const BASELINE_COLOR = "var(--gold)";
 
 interface BatchLearningCurveProps {
   series: BatchWindow[];

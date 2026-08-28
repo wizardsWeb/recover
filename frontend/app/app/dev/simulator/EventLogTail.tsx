@@ -20,7 +20,7 @@ const EVENT_STYLES: Record<EventType, string> = {
   "payment.failed": "bg-danger-subtle text-danger",
   "subscription.charged.failed": "bg-danger-subtle text-danger",
   "checkout.abandoned": "bg-warning-subtle text-warning",
-  "invoice.overdue": "bg-info-subtle text-ink-blue",
+  "invoice.overdue": "bg-info-subtle text-gold",
   "customer.replied": "bg-brand-subtle text-brand",
 };
 

@@ -30,7 +30,7 @@ const TOKEN_PATTERN =
   /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"\s*:?)|(\b-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\btrue\b|\bfalse\b|\bnull\b)/g;
 
 const TOKEN_CLASS: Record<TokenKind, string> = {
-  key: "text-ink-blue",
+  key: "text-gold",
   string: "text-success",
   number: "text-brand",
   keyword: "text-danger",
