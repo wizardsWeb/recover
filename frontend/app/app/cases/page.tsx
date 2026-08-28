@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { CasesRealtimeUpdater } from "@/components/domain/CasesRealtimeUpdater";
+import { NoCasesYet } from "@/components/empty-states/NoCasesYet";
 import { PageHeader } from "@/components/shell/PageHeader";
 import type { CaseListItem } from "@/lib/api/cases";
 import { getCases } from "@/lib/api/cases.server";
@@ -37,21 +37,5 @@ export default async function CasesPage() {
   // The list is server-rendered for the first paint and then owned by the
   // island, which re-reads on every Realtime change. The header goes with it so
   // the case count in the subtitle cannot drift from the rows below it.
-  return (
-    <CasesRealtimeUpdater
-      initial={cases}
-      emptyState={
-        <div className="rounded-xl border border-hairline bg-elevated p-12 text-center">
-          <p className="text-sm text-ink-faint">No cases yet.</p>
-          <p className="mt-1 text-xs text-ink-faint">
-            Fire a scenario from the{" "}
-            <Link href="/app/dev/simulator" className="underline">
-              Simulator
-            </Link>{" "}
-            to see cases appear here.
-          </p>
-        </div>
-      }
-    />
-  );
+  return <CasesRealtimeUpdater initial={cases} emptyState={<NoCasesYet />} />;
 }

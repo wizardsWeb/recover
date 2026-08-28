@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AuditLogEntry } from "@/components/domain/AuditLogEntry";
+import { NoAuditEvents } from "@/components/empty-states/NoAuditEvents";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import type { AuditEvent } from "@/lib/api/cases";
@@ -37,9 +38,7 @@ export default async function AuditPage() {
             Could not load the audit trail. The API did not respond.
           </div>
         ) : events.length === 0 ? (
-          <div className="py-12 text-center text-sm text-ink-faint">
-            No audit events yet. Fire a scenario to see the agent in action.
-          </div>
+          <NoAuditEvents />
         ) : (
           <div className="divide-y divide-hairline">
             {events.map((entry, index) => (
