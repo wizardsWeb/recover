@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from app.api import analytics, audit, cases, events, health, merchants, simulator
+from app.api import analytics, audit, cases, events, health, merchants, playbooks, simulator
 from app.config import get_settings
 from app.logging import configure_logging, get_logger
 
@@ -103,6 +103,7 @@ app.include_router(health.router)
 app.include_router(merchants.router)
 app.include_router(events.router)
 app.include_router(cases.router)
+app.include_router(playbooks.router)
 app.include_router(audit.router)
 app.include_router(analytics.router)
 # The simulator router refuses to serve outside a development environment;

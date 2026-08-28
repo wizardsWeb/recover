@@ -49,6 +49,7 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "uplift_bucket": None,
         "is_holdout": False,
         "trigger_event_id": None,
+        "metadata": {},
     },
     "customer_replies": {
         "customer_id": None,
@@ -136,6 +137,7 @@ class _Query:
         self._limit: int | None = None
         self._order: tuple[str, bool] | None = None
         self._embed: str | None = None
+        self._embed_columns: list[str] = []
         self._count: str | None = None
         self._range: tuple[int, int] | None = None
         self._on_conflict: str | None = None
@@ -145,10 +147,15 @@ class _Query:
     def select(self, *columns: str, **kwargs: Any) -> _Query:
         self._op = "select"
         self._count = kwargs.get("count")
-        # `customers(name)` asks PostgREST to embed the related row.
+        # `customers(name)` asks PostgREST to embed the related row; `customers(*)`
+        # asks for all of its columns. The distinction matters — code reading an
+        # embedded LTV would read zero against a fake that only ever returned the
+        # name, and the test would pass while production disagreed.
         for column in columns:
             if "(" in column:
                 self._embed = column[: column.index("(")].rsplit(",", 1)[-1].strip()
+                inner = column[column.index("(") + 1 : column.rindex(")")]
+                self._embed_columns = [c.strip() for c in inner.split(",") if c.strip()]
         return self
 
     def insert(self, payload: Any, **_: Any) -> _Query:
@@ -312,7 +319,12 @@ class _Query:
         if self._embed:
             for row in result:
                 related = self._db.find_one(self._embed, row.get(f"{self._embed[:-1]}_id"))
-                row[self._embed] = {"name": related.get("name")} if related else None
+                if related is None:
+                    row[self._embed] = None
+                elif "*" in self._embed_columns:
+                    row[self._embed] = dict(related)
+                else:
+                    row[self._embed] = {c: related.get(c) for c in self._embed_columns}
         return _Result(result, total)
 
 

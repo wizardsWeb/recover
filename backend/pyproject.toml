@@ -48,6 +48,7 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 # scenarios.md and `fire_scenario_S6`; `test_s6_sana.py` is not.
 "tests/scenarios/test_S6_sana.py" = ["N999"]
 "tests/scenarios/test_S1_S2_S3.py" = ["N999"]
+"tests/scenarios/test_S4_S5.py" = ["N999"]
 
 [tool.mypy]
 python_version = "3.11"

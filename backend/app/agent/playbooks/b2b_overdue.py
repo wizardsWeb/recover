@@ -29,8 +29,18 @@ B2B_OVERDUE_CONFIG = PlaybookConfig(
     ],
     default_arm="polite_reminder_whatsapp",  # start at the bottom of the tone ladder
     max_total_attempts=6,  # 45 days at 2/week, with room to stop early
-    max_messages_per_day=1,
-    max_messages_per_week=2,
+    # Two a day, four a week — sized to the graduated ladder rather than to a
+    # consumer's inbox. Its firm rung deliberately contacts on WhatsApp *and*
+    # email at once (scenarios.md S4: "Simultaneously: email fires with same
+    # content, more formal"), because an accounts-payable desk is more likely to
+    # act on an invoice that lands in both places. A cap of one would have made
+    # the playbook define an arm that violates its own limit on first use.
+    #
+    # This is a merchant business rule about contacting another business, not a
+    # TRAI consumer limit — quiet hours and consent are enforced separately and
+    # are unchanged.
+    max_messages_per_day=2,
+    max_messages_per_week=4,
     max_discount_pct=0.0,  # B2B negotiates terms, not price
     # No arm retries a charge — there is no mandate on an invoice.
     rbi_max_retries_per_cycle=0,

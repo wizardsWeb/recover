@@ -15,6 +15,8 @@ import {
 import type { ReactNode } from "react";
 
 import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan";
+import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
+import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
 import type {
   AgentDecision,
@@ -441,6 +443,16 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
   const decideRow: AgentDecision | null =
     [...caseDetail.agent_decisions].reverse().find((d) => d.step_name === "decide") ?? null;
   const contextBucket = decideRow ? buildContextBucket(decideRow.bandit_context_vector) : null;
+  // A handoff is an action the agent took, so it lives in execution_attempts
+  // beside the sends rather than in a table of its own — which is what lets the
+  // timeline stay a single ordered source.
+  const handoff =
+    caseDetail.execution_attempts.find((a) => a.action_type === "human_handoff") ?? null;
+  // Promise state is on the case row, not the audit trail: it is current state
+  // the next pass reads, not a thing that happened once.
+  const promise = (caseDetail.metadata?.promise_to_pay ?? null) as
+    | Record<string, unknown>
+    | null;
   const messageAttempt =
     [...caseDetail.execution_attempts]
       .reverse()
@@ -529,8 +541,16 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
                   <ExecuteDetail attempt={messageAttempt} />
                 ) : null}
 
+                {stepName === "execute" && handoff ? (
+                  <HumanHandoffCard payload={handoff.request_payload ?? {}} />
+                ) : null}
+
                 {stepName === "listen" && outcome.details?.intent ? (
                   <ListenDetail details={outcome.details} reply={classifiedReply} />
+                ) : null}
+
+                {stepName === "listen" && promise ? (
+                  <PromiseToPayCard promise={promise} />
                 ) : null}
 
                 {events.length > 1 ? (

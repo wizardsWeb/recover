@@ -45,6 +45,7 @@ from typing import Any
 from app.agent import audit
 from app.agent.bandit.reward import post_reward
 from app.agent.guardrail import run_guardrail
+from app.agent.handoff import create_handoff_attempt
 from app.agent.models import (
     ActionType,
     AgentLoopResult,
@@ -55,6 +56,7 @@ from app.agent.models import (
     GuardrailResult,
     ListenResult,
     Playbook,
+    ReplyIntent,
     StepName,
     UpliftVerdict,
 )
@@ -207,7 +209,7 @@ async def run_agent_loop(
             {"uplift_bucket": uplift.bucket.value, "current_step": "uplift_check"},
         )
         if uplift.verdict == "SKIP":
-            listen, exit_reason = await _hear_pending_reply(
+            listen, exit_status, exit_reason = await _hear_pending_reply(
                 supabase_client,
                 case,
                 customer,
@@ -217,17 +219,19 @@ async def run_agent_loop(
                 steps_completed,
                 fallback_reason="Uplift check: not a persuadable case",
             )
-            await _close_case(
-                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
-            )
+            if exit_status in _TERMINAL_STATUSES:
+                await _close_case(
+                    supabase_client, case_id, exit_status, exit_reason, trace_id, merchant_id
+                )
             steps_completed.append(StepName.AUDIT)
-            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
+            if exit_status in _TERMINAL_STATUSES:
+                await _post_close_reward(supabase_client, case, exit_status, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
                 playbook=playbook_enum,
                 steps_completed=steps_completed,
-                final_status=CaseStatus.STOPPED,
+                final_status=exit_status,
                 diagnosis=diagnosis,
                 uplift=uplift,
                 listen=listen,
@@ -286,7 +290,7 @@ async def run_agent_loop(
         # A second downgrade means every allowed channel has been tried, so there
         # is nowhere left to fall back to and it is treated as a block.
         if guardrail.verdict != "PASS":
-            listen, exit_reason = await _hear_pending_reply(
+            listen, exit_status, exit_reason = await _hear_pending_reply(
                 supabase_client,
                 case,
                 customer,
@@ -295,18 +299,21 @@ async def run_agent_loop(
                 merchant_id,
                 steps_completed,
                 fallback_reason=f"Guardrail blocked: {guardrail.blocking_check}",
+                decision=decision_dict,
             )
-            await _close_case(
-                supabase_client, case_id, CaseStatus.STOPPED, exit_reason, trace_id, merchant_id
-            )
+            if exit_status in _TERMINAL_STATUSES:
+                await _close_case(
+                    supabase_client, case_id, exit_status, exit_reason, trace_id, merchant_id
+                )
             steps_completed.append(StepName.AUDIT)
-            await _post_close_reward(supabase_client, case, CaseStatus.STOPPED, trace_id)
+            if exit_status in _TERMINAL_STATUSES:
+                await _post_close_reward(supabase_client, case, exit_status, trace_id)
             return AgentLoopResult(
                 case_id=case_id,
                 trace_id=trace_id,
                 playbook=playbook_enum,
                 steps_completed=steps_completed,
-                final_status=CaseStatus.STOPPED,
+                final_status=exit_status,
                 diagnosis=diagnosis,
                 uplift=uplift,
                 decision=decision,
@@ -331,7 +338,13 @@ async def run_agent_loop(
         heard_early = False
         if pending_reply:
             listen, early_status, early_reason = await _run_listen_stage(
-                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+                supabase_client,
+                case,
+                customer,
+                pending_reply,
+                trace_id,
+                merchant_id,
+                decision_dict,
             )
             steps_completed.append(StepName.LISTEN)
             heard_early = True
@@ -411,7 +424,13 @@ async def run_agent_loop(
             final_status, close_reason = CaseStatus.IN_FLIGHT, None
         else:
             listen, final_status, close_reason = await _run_listen_stage(
-                supabase_client, case, customer, pending_reply, trace_id, merchant_id
+                supabase_client,
+                case,
+                customer,
+                pending_reply,
+                trace_id,
+                merchant_id,
+                decision_dict,
             )
             steps_completed.append(StepName.LISTEN)
 
@@ -516,6 +535,7 @@ async def _run_listen_stage(
     pending_reply: dict[str, Any] | None,
     trace_id: str,
     merchant_id: str,
+    decision: dict[str, Any] | None = None,
 ) -> tuple[ListenResult, CaseStatus, str | None]:
     """Classify any pending reply, apply what it implies, and audit both.
 
@@ -578,7 +598,13 @@ async def _run_listen_stage(
             ("Customer opted out — consent revoked across all channels"),
         )
 
+    # Hardship and churn both stop the agent and start a person. The briefing is
+    # written here, beside the decision to stop, so a case can never be closed
+    # for a human to pick up without the context they need to pick it up.
     if listen.hardship_signal:
+        _hand_off(
+            supabase_client, case, customer, "hardship", merchant_id, trace_id, decision, listen
+        )
         return (
             listen,
             CaseStatus.STOPPED,
@@ -586,13 +612,119 @@ async def _run_listen_stage(
         )
 
     if listen.churn_signal:
+        _hand_off(supabase_client, case, customer, "churn", merchant_id, trace_id, decision, listen)
         return (
             listen,
             CaseStatus.STOPPED,
             ("Customer confirmed churn — recovery stopped, handoff to retention team"),
         )
 
+    if listen.intent is ReplyIntent.PROMISE_TO_PAY:
+        await handle_promise_to_pay(supabase_client, case_id, listen, merchant_id, trace_id)
+
     return listen, CaseStatus.IN_FLIGHT, None
+
+
+def _hand_off(
+    supabase_client: Any,
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    reason: str,
+    merchant_id: str,
+    trace_id: str,
+    decision: dict[str, Any] | None,
+    listen: ListenResult,
+) -> None:
+    """Write the handoff briefing for a case a person now owns."""
+    create_handoff_attempt(
+        supabase_client,
+        case,
+        customer,
+        reason,
+        merchant_id=merchant_id,
+        trace_id=trace_id,
+        chosen_arm=(decision or {}).get("chosen_arm"),
+        customer_reply=listen.raw_text,
+    )
+
+
+async def handle_promise_to_pay(
+    supabase_client: Any,
+    case_id: str,
+    listen: ListenResult,
+    merchant_id: str,
+    trace_id: str,
+) -> None:
+    """Record a promise and stand down, without closing the case.
+
+    A promise is the one reply that is neither a stop nor an outcome. The
+    customer has not paid, so there is nothing to reward; they have not refused,
+    so there is nothing to close. Treating it as either is wrong in an expensive
+    direction — closing it recovered books money that has not arrived, and
+    closing it stopped abandons a customer who just said they would pay.
+
+    So the case stays ``in_flight`` with its terms recorded, and ``current_step``
+    becomes ``awaiting_promise`` — which is what stops the next pass reading a
+    quiet case as one that needs chasing again.
+    """
+    entities = listen.extracted_entities or {}
+    promise = {
+        "date_hint": entities.get("promise_date_hint"),
+        "partial_pct": entities.get("partial_pct"),
+        "amount_mentioned": entities.get("amount_mentioned"),
+        "reason_offered": entities.get("reason_offered"),
+        "promised_at": datetime.now(UTC).isoformat(),
+        "raw_reply": listen.raw_text,
+        "reply_id": listen.reply_id,
+    }
+
+    # Merged, not replaced: `metadata` is shared working state, and a later
+    # phase writing holdout or uplift fields must not lose them to this update.
+    existing = await _fetch_case_metadata(supabase_client, case_id)
+    _update_case(
+        supabase_client,
+        case_id,
+        {
+            "metadata": {**existing, "promise_to_pay": promise},
+            "status": CaseStatus.IN_FLIGHT.value,
+            "current_step": "awaiting_promise",
+        },
+    )
+
+    await audit.log_agent_step(
+        supabase_client,
+        case_id,
+        merchant_id,
+        "listen",
+        "agent",
+        "promise_tracked",
+        promise,
+        trace_id,
+    )
+    logger.info(
+        "promise_to_pay_tracked",
+        case_id=case_id,
+        date_hint=promise["date_hint"],
+        partial_pct=promise["partial_pct"],
+        trace_id=trace_id,
+    )
+
+
+async def _fetch_case_metadata(supabase_client: Any, case_id: str) -> dict[str, Any]:
+    """The case's stored metadata, or ``{}`` if it cannot be read."""
+    try:
+        resp = (
+            supabase_client.table("recovery_cases")
+            .select("metadata")
+            .eq("id", case_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    if not resp.data:
+        return {}
+    return dict(resp.data[0].get("metadata") or {})
 
 
 async def _hear_pending_reply(
@@ -605,7 +737,8 @@ async def _hear_pending_reply(
     steps_completed: list[StepName],
     *,
     fallback_reason: str,
-) -> tuple[ListenResult | None, str]:
+    decision: dict[str, Any] | None = None,
+) -> tuple[ListenResult | None, CaseStatus, str]:
     """Run the listen stage on an early exit, if a reply is waiting.
 
     Listening is perception, not action. A pass that the uplift check or the
@@ -617,15 +750,21 @@ async def _hear_pending_reply(
     A reason derived from the customer's own words outranks the machine's:
     "customer opted out" is the truer account of why the case closed than
     "guardrail blocked", so it wins when both are available.
+
+    **And so does the customer's status.** The returned status is what listening
+    concluded, not an assumed stop. A pass that cannot send because the daily cap
+    is spent, on a case where the customer has just promised to pay on the 25th,
+    must leave that case open — being blocked from speaking is not a reason to
+    abandon a recovery the customer is still cooperating with.
     """
     if not pending_reply:
-        return None, fallback_reason
+        return None, CaseStatus.STOPPED, fallback_reason
 
-    listen, _status, close_reason = await _run_listen_stage(
-        supabase_client, case, customer, pending_reply, trace_id, merchant_id
+    listen, status, close_reason = await _run_listen_stage(
+        supabase_client, case, customer, pending_reply, trace_id, merchant_id, decision
     )
     steps_completed.append(StepName.LISTEN)
-    return listen, close_reason or fallback_reason
+    return listen, status, close_reason or fallback_reason
 
 
 async def _get_or_create_case(
@@ -776,8 +915,15 @@ def _enrich_case(
 ) -> dict[str, Any]:
     """Build the case dict the steps actually consume.
 
-    The ``recovery_cases`` row has no ``metadata`` column and no contact
-    details, but the guardrail's network-alert check needs the bank and method,
+    **Note the name collision.** ``recovery_cases`` now *does* have a
+    ``metadata`` column — Phase 7 added it for promise tracking — and this
+    function overwrites that key with the trigger event's payload. Inside a
+    pass, ``case["metadata"]`` means the event payload; on the row it means the
+    agent's stored working state. Anything that needs the stored version reads
+    it back with ``_fetch_case_metadata`` rather than trusting this dict.
+
+    The row has no contact details either, but the guardrail's network-alert
+    check needs the bank and method,
     and the execute adapters need a phone number. Both live on the trigger event
     payload and the customer row, so they are merged in here — once, in the
     orchestrator — rather than having five steps each learn where to look.
