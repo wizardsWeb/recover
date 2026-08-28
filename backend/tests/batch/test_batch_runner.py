@@ -354,3 +354,34 @@ async def test_the_runner_yields_the_event_loop() -> None:
     watcher.cancel()
 
     assert ticks >= 500 // module.CHUNK
+
+
+async def test_a_fixed_seed_reproduces_the_whole_run() -> None:
+    """Two random streams have to be pinned, not one.
+
+    The world draws use a local generator, but Thompson sampling calls
+    `random.betavariate` on the module-level one. Seeding only the local stream
+    leaves every arm choice uncontrolled and produces a run that is labelled
+    reproducible and is not — which is exactly what a rehearsed demo would
+    discover on stage.
+    """
+    first = await run_batch(None, MERCHANT, n_cases=400, seed=9, persist_cases=False)
+    second = await run_batch(None, MERCHANT, n_cases=400, seed=9, persist_cases=False)
+
+    assert first.time_series == second.time_series
+    assert first.gross_recovered_inr == second.gross_recovered_inr
+    assert first.bandit_convergence_case == second.bandit_convergence_case
+
+
+async def test_a_seeded_run_does_not_re_seed_the_rest_of_the_process() -> None:
+    """A library function that quietly pins the global generator would make
+    every later `random` call in the process deterministic too."""
+    import random
+
+    random.seed(1234)
+    expected = [random.random() for _ in range(3)]
+
+    random.seed(1234)
+    await run_batch(None, MERCHANT, n_cases=100, seed=7, persist_cases=False)
+
+    assert [random.random() for _ in range(3)] == expected

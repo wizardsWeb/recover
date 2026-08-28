@@ -261,6 +261,10 @@ async def get_benchmark(user_id: CurrentUserId, supabase: UserSupabase) -> dict[
         supabase.table("recovery_cases")
         .select("closed_at, amount_recovered_cents")
         .eq("merchant_id", user_id)
+        # Batch-simulated cases are excluded here and in the peer read below.
+        # Left in, a merchant who ran a demo would jump the percentile on
+        # invented recoveries, and everyone else's rank would move with it.
+        .is_("metadata->>is_batch_synthetic", "null")
         .limit(_MAX_ROWS)
         .execute()
     )
@@ -332,6 +336,7 @@ def _peer_rates(exclude_merchant_id: str) -> list[float]:
             get_service_client()
             .table("recovery_cases")
             .select("merchant_id, closed_at, amount_recovered_cents")
+            .is_("metadata->>is_batch_synthetic", "null")
             .limit(_MAX_ROWS)
             .execute()
         )

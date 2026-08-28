@@ -256,7 +256,14 @@ class _Query:
         if "->>" in column:
             container, key = column.split("->>", 1)
             nested = row.get(container.strip()) or {}
-            return _json_text(nested.get(key.strip()) if isinstance(nested, dict) else None)
+            value = nested.get(key.strip()) if isinstance(nested, dict) else None
+            # A key that is absent, or present as JSON null, reads as SQL NULL —
+            # *not* as the text "null". The distinction is what makes
+            # `is.null` work: it is how a filter excludes rows that never had
+            # the key, which is how synthetic batch cases are kept out of every
+            # read that reports money. Rendering it as text instead matches
+            # nothing and silently disables the filter.
+            return None if value is None else _json_text(value)
         return row.get(column)
 
     def _matches(self, row: dict[str, Any]) -> bool:

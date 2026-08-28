@@ -62,8 +62,14 @@ async def list_cases(
     playbook: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    include_synthetic: Annotated[bool, Query(alias="includeSynthetic")] = False,
 ) -> dict[str, Any]:
-    """Return a paginated list of cases for the current merchant, newest first."""
+    """Return a paginated list of cases for the current merchant, newest first.
+
+    Batch-simulated cases are hidden unless asked for. A thousand-case run would
+    otherwise bury every real case below a page of manufactured ones, and the
+    list is where a merchant goes to look at work the agent actually did.
+    """
     query = (
         supabase.table("recovery_cases")
         .select(_LIST_COLUMNS)
@@ -71,6 +77,8 @@ async def list_cases(
         .order("opened_at", desc=True)
         .range(offset, offset + limit - 1)
     )
+    if not include_synthetic:
+        query = query.is_("metadata->>is_batch_synthetic", "null")
     if status_filter:
         query = query.eq("status", status_filter)
     if playbook:

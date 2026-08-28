@@ -213,13 +213,13 @@ def intervention_cost_inr(arm: str) -> float:
 #: test that fails a third of the time and teaches nothing when it does.
 _CALIBRATION = """
 metric                  whole  settled  target   delta     sd
-bandit                  0.336    0.390   0.380  +0.010  0.038
+bandit                  0.337    0.389   0.380  +0.009  0.032
 baseline                0.223    0.221   0.220  +0.001  0.027
-subscription_failure    0.385    0.476   0.420  +0.056  0.092
-checkout_abandonment    0.290    0.344   0.310  +0.034  0.044
-failed_payment          0.350    0.388   0.380  +0.008  0.070
-b2b_overdue             0.306    0.328   0.280  +0.048  0.122
+subscription_failure    0.377    0.474   0.420  +0.054  0.087
+checkout_abandonment    0.293    0.340   0.310  +0.030  0.052
+failed_payment          0.352    0.392   0.380  +0.012  0.058
+b2b_overdue             0.314    0.330   0.280  +0.050  0.112
 
-incremental / gross        0.603   (results screen reads ~60% true attribution)
-convergence case, median     275   (crossover inside the 150-300 window)
+incremental / gross        0.606   (results screen reads ~60% true attribution)
+convergence case, median     175   (crossover inside the 150-300 window)
 """

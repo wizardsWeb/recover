@@ -464,10 +464,47 @@ async def run_batch(
     for a merchant without a request to scope them to. `persist_cases=False`
     skips the case rows entirely, which is what calibration runs use — they want
     the numbers, not a thousand rows.
+
+    `seed` has to reach two separate random streams to mean anything. The world
+    draws use a local `Random`, but Thompson sampling calls `random.betavariate`
+    on the module-level generator — so seeding only the local one leaves the
+    bandit's every draw uncontrolled, and a run labelled reproducible is not.
+    The global stream is therefore seeded too, and its prior state restored
+    afterwards so a batch does not silently re-seed the rest of the process.
     """
     rng = random.Random(seed)
     distribution = playbook_distribution or DEFAULT_PLAYBOOK_DISTRIBUTION
     started = time.perf_counter()
+
+    global_state = random.getstate()
+    if seed is not None:
+        random.seed(seed)
+    try:
+        return await _run(
+            supabase_client,
+            merchant_id,
+            n_cases,
+            distribution,
+            rng,
+            batch_id,
+            persist_cases,
+            started,
+        )
+    finally:
+        random.setstate(global_state)
+
+
+async def _run(
+    supabase_client: Any,
+    merchant_id: str,
+    n_cases: int,
+    distribution: dict[str, float],
+    rng: random.Random,
+    batch_id: str | None,
+    persist_cases: bool,
+    started: float,
+) -> BatchResult:
+    """The run itself, with both random streams already pinned."""
 
     posteriors = _Posteriors()
     if supabase_client is not None:
