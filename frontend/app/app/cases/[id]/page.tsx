@@ -13,8 +13,6 @@ import { CaseActions } from "./CaseActions";
 
 export const metadata: Metadata = { title: "Case" };
 
-const ACTIVE_STATUSES = new Set(["open", "in_flight"]);
-
 export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[id]">) {
   const { id } = await params;
 
@@ -95,16 +93,17 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
             </CardContent>
           </Card>
 
-          {ACTIVE_STATUSES.has(caseDetail.status) ? (
-            <Card className="border-hairline">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CaseActions caseId={caseDetail.id} />
-              </CardContent>
-            </Card>
-          ) : null}
+          {/* Rendered for every case, closed ones included. `CaseActions`
+              disables itself once a case is terminal, so the panel does not
+              vanish out from under a reader the moment the agent closes it. */}
+          <Card className="border-hairline">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CaseActions caseId={caseDetail.id} status={caseDetail.status} />
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>
