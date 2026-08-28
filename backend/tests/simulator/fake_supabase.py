@@ -49,6 +49,7 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "uplift_bucket": None,
         "is_holdout": False,
         "trigger_event_id": None,
+        "metadata": {},
     },
     "customer_replies": {
         "customer_id": None,

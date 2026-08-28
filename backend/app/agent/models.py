@@ -240,6 +240,10 @@ class ListenResult(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     reply_id: str | None = None
+    #: What the customer actually wrote. Carried on the result because the
+    #: things that act on a classification — the promise record, the handoff
+    #: card — are more trustworthy quoting the reply than paraphrasing it.
+    raw_text: str | None = None
     intent: ReplyIntent
     language: str
     opt_out_signal: bool

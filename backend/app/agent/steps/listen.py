@@ -140,6 +140,7 @@ async def run_listen(
     reply_id = customer_reply.get("id")
 
     result = await _classify(raw, reply_id, case, supabase_client)
+    result.raw_text = raw
     _record_classification(supabase_client, reply_id, result)
     return result
 
