@@ -90,6 +90,12 @@ MAX_CASES = 2000
 #: `recovery_cases` insert rather than by any of the simulation.
 SECONDS_PER_CASE = 0.012
 
+#: Synthetic customers a batch's case rows hang off. `recovery_cases.customer_id`
+#: is NOT NULL and references `customers`, so a run with no pool writes no rows
+#: at all — silently, because the insert is deliberately non-fatal.
+BATCH_CUSTOMER_PREFIX = "batch-sim"
+BATCH_CUSTOMER_POOL = 12
+
 #: Marks a case row as manufactured. Every read that reports money filters on
 #: it — a thousand fabricated recoveries would otherwise land on the ROI page as
 #: revenue the agent earned.
@@ -521,6 +527,18 @@ async def _run(
         except Exception as exc:  # noqa: BLE001 - a cold start is a valid start
             logger.warning("batch_posterior_seed_failed", error=str(exc))
 
+    customer_ids: list[str] = []
+    if persist_cases and supabase_client is not None:
+        try:
+            customer_ids = await asyncio.to_thread(_ensure_customers, supabase_client, merchant_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("batch_customer_pool_failed", error=str(exc))
+    if not customer_ids:
+        # No pool means no rows that could satisfy the foreign key. Skipping the
+        # writes outright is better than a thousand rejected inserts and a log
+        # line for each — the result lives in `batch_runs` either way.
+        persist_cases = False
+
     cases: list[BatchCase] = []
     compliance = ComplianceSummary()
     series: list[dict[str, Any]] = []
@@ -562,7 +580,7 @@ async def _run(
                 compliance.human_handoffs += 1
 
         if persist_cases:
-            pending_rows.append(_case_row(merchant_id, world, bandit))
+            pending_rows.append(_case_row(merchant_id, world, bandit, rng.choice(customer_ids)))
 
         if (index + 1) % WINDOW == 0:
             series.append(
@@ -671,7 +689,46 @@ def _aggregate(
     return result
 
 
-def _case_row(merchant_id: str, world: _World, case: BatchCase) -> dict[str, Any]:
+def _ensure_customers(supabase_client: Any, merchant_id: str) -> list[str]:
+    """A small pool of synthetic customers for the case rows to point at.
+
+    `recovery_cases.customer_id` is `NOT NULL REFERENCES customers(id)`, so
+    without this every insert fails on the constraint — and because the insert
+    is non-fatal by design, the run still reports success having written nothing.
+    That is exactly what happened until this existed: the fake database used in
+    tests does not enforce NOT NULL, so a hundred rows landed there and none did
+    in Postgres.
+
+    A pool rather than one customer per case: a thousand new customer rows per
+    run would dwarf the real ones in every list that reads that table, and the
+    simulation does not model customer identity anyway.
+    """
+    existing = _rows(
+        supabase_client.table("customers")
+        .select("id")
+        .eq("merchant_id", merchant_id)
+        .like("external_id", f"{BATCH_CUSTOMER_PREFIX}-%")
+        .limit(BATCH_CUSTOMER_POOL)
+        .execute()
+    )
+    ids = [str(row["id"]) for row in existing]
+    if len(ids) >= BATCH_CUSTOMER_POOL:
+        return ids
+
+    pending = [
+        {
+            "merchant_id": merchant_id,
+            "external_id": f"{BATCH_CUSTOMER_PREFIX}-{index}",
+            "name": f"Batch simulation {index + 1}",
+            "metadata": {SYNTHETIC_FLAG: True},
+        }
+        for index in range(len(ids), BATCH_CUSTOMER_POOL)
+    ]
+    written = _rows(supabase_client.table("customers").insert(pending).execute())
+    return ids + [str(row["id"]) for row in written]
+
+
+def _case_row(merchant_id: str, world: _World, case: BatchCase, customer_id: str) -> dict[str, Any]:
     """The `recovery_cases` row for one simulated case.
 
     Flagged synthetic, and every read that reports money filters on that flag. A
@@ -683,6 +740,7 @@ def _case_row(merchant_id: str, world: _World, case: BatchCase) -> dict[str, Any
     return {
         "id": case.case_id,
         "merchant_id": merchant_id,
+        "customer_id": customer_id,
         "playbook": world.playbook,
         "status": "recovered" if case.recovered else "stopped",
         "amount_at_risk_cents": amount_paise,

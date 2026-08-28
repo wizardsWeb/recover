@@ -445,3 +445,65 @@ async def test_human_handoffs_are_counted_because_they_are_what_cost_money() -> 
 
     assert result.human_handoffs > 0
     assert result.compliance_summary.human_handoffs == result.human_handoffs
+
+
+# ── The case rows can actually be inserted ─────────────────────────────
+
+
+async def test_a_synthetic_case_names_the_customer_it_belongs_to() -> None:
+    """`recovery_cases.customer_id` is NOT NULL and references `customers`.
+
+    Omitting it fails every insert with 23502 — and because `_insert_cases` is
+    deliberately non-fatal, the run still completes and reports a result while
+    writing nothing. That is what shipped, and what the fake missed: it did not
+    enforce NOT NULL, so a hundred rows landed in the test and zero in Postgres.
+    """
+    db = FakeSupabase()
+    db.seed_merchant(MERCHANT)
+
+    await run_batch(db, MERCHANT, n_cases=100, seed=1)
+
+    rows = db.rows("recovery_cases")
+    assert len(rows) == 100
+    assert all(row["customer_id"] for row in rows)
+
+
+async def test_the_customer_pool_is_reused_across_runs() -> None:
+    """A thousand new customers per run would dwarf the real ones in every list
+    that reads the table."""
+    db = FakeSupabase()
+    db.seed_merchant(MERCHANT)
+
+    await run_batch(db, MERCHANT, n_cases=100, seed=1)
+    first = len(db.rows("customers"))
+    await run_batch(db, MERCHANT, n_cases=100, seed=2)
+
+    assert len(db.rows("customers")) == first == module.BATCH_CUSTOMER_POOL
+
+
+async def test_pool_customers_are_flagged_synthetic() -> None:
+    """They are manufactured, and every read that reports money filters on it."""
+    db = FakeSupabase()
+    db.seed_merchant(MERCHANT)
+
+    await run_batch(db, MERCHANT, n_cases=100, seed=1)
+
+    assert all(row["metadata"][SYNTHETIC_FLAG] for row in db.rows("customers"))
+
+
+async def test_a_pool_that_cannot_be_built_skips_the_writes_rather_than_failing_each() -> None:
+    """No pool means no row can satisfy the foreign key. A thousand rejected
+    inserts and a log line each is worse than not trying — the result lives in
+    `batch_runs` either way."""
+
+    class NoCustomers(FakeSupabase):
+        def table(self, name: str) -> Any:
+            if name == "customers":
+                raise ConnectionError("customers unavailable")
+            return super().table(name)
+
+    db = NoCustomers()
+    result = await run_batch(db, MERCHANT, n_cases=100, seed=1)
+
+    assert result.total_cases == 100
+    assert db.rows("recovery_cases") == []

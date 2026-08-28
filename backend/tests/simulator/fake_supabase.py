@@ -118,6 +118,30 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 
+#: Columns Postgres will refuse an insert without.
+#:
+#: The fake does not validate the schema in general — migrations are the
+#: schema's own test — but NOT NULL on a foreign key is the one omission that
+#: fails *silently* in this codebase, because several writers are deliberately
+#: non-fatal. A batch run that never set `customer_id` inserted a hundred rows
+#: here and zero in Postgres, reported success, and was only caught by probing
+#: the live database by hand.
+#:
+#: Only the columns whose absence a real insert rejects. Adding every NOT NULL
+#: column would turn this into a second copy of the schema to keep in step.
+_REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "recovery_cases": ("merchant_id", "customer_id", "playbook", "amount_at_risk_cents"),
+    "agent_decisions": ("case_id", "merchant_id", "step_number", "step_name"),
+    "execution_attempts": ("case_id", "merchant_id", "action_type", "adapter"),
+    "customer_replies": ("case_id", "merchant_id", "channel", "raw_text"),
+    "bandit_rewards": ("merchant_id", "case_id", "arm_name", "context_vector", "context_bucket"),
+    "uplift_holdouts": ("case_id", "merchant_id"),
+    "batch_runs": ("merchant_id", "n_cases"),
+    "causal_edge_updates": ("merchant_id", "playbook", "from_node", "to_node"),
+    "customers": ("merchant_id",),
+    "events": ("merchant_id", "event_type"),
+}
+
 #: Timestamp column each table orders by, filled in on insert.
 _TIMESTAMP_COLUMNS: dict[str, str] = {
     "events": "received_at",
@@ -397,6 +421,16 @@ class FakeSupabase:
         return (_EPOCH + timedelta(seconds=self._clock)).isoformat()
 
     def insert_row(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
+        missing = [column for column in _REQUIRED_COLUMNS.get(table, ()) if row.get(column) is None]
+        if missing:
+            # Mirrors Postgres's 23502. Raised rather than logged, because the
+            # writers that would swallow it are exactly the ones this exists to
+            # catch — they report success having written nothing.
+            raise ValueError(
+                f'null value in column "{missing[0]}" of relation "{table}" '
+                f"violates not-null constraint"
+            )
+
         stamp = self._next_timestamp()
         stored: dict[str, Any] = {
             "id": str(uuid.uuid4()),
