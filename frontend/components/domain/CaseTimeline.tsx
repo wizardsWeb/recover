@@ -18,6 +18,7 @@ import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan
 import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
 import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
+import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import type {
   AgentDecision,
   AuditEvent,
@@ -340,11 +341,11 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative max-w-md rounded-lg rounded-tr-sm bg-[#dcf8c6] px-3 py-2 dark:bg-[#1f3320]">
+      <div className="relative max-w-md rounded-lg rounded-tr-sm bg-whatsapp-bubble px-3 py-2">
         <span className="absolute top-1.5 right-2 text-[9px] font-medium text-warning">
           Simulated
         </span>
-        <p className="pr-14 text-sm whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef]">
+        <p className="pr-14 text-sm whitespace-pre-wrap text-whatsapp-ink">
           {body}
         </p>
       </div>
@@ -491,7 +492,7 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
         }
 
         return (
-          <div key={stepName} className="flex gap-3">
+          <StaggeredItem key={stepName} index={index} className="flex gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${RAIL_STYLES[status]}`}
@@ -560,7 +561,7 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
                 ) : null}
               </StepResultCard>
             </div>
-          </div>
+          </StaggeredItem>
         );
       })}
     </div>

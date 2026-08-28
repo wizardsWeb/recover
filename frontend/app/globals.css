@@ -70,6 +70,14 @@
   --info: #3f4e8c;
   --info-subtle: #e6e9f5;
 
+  /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
+     literals in the component. Not folded into --success-subtle: the point of
+     this bubble is that a merchant recognises the channel at a glance, and a
+     generic green loses the one cue that says "this went out on WhatsApp".
+     The dark values are WhatsApp's dark theme, not an algorithmic darkening. */
+  --whatsapp-bubble: #dcf8c6;
+  --whatsapp-ink: #111b21;
+
   --radius: 8px;
 
   /* --- shadcn contract -----------------------------------------------------
@@ -146,6 +154,9 @@
   --danger-subtle: #2b1614;
   --info: #8a97d8;
   --info-subtle: #191c2e;
+
+  --whatsapp-bubble: #1f3320;
+  --whatsapp-ink: #e9edef;
 }
 
 /* ===========================================================================
@@ -197,6 +208,10 @@
   --color-danger-subtle: var(--danger-subtle);
   --color-info: var(--info);
   --color-info-subtle: var(--info-subtle);
+
+  /* Channel chrome — bg-whatsapp-bubble, text-whatsapp-ink */
+  --color-whatsapp-bubble: var(--whatsapp-bubble);
+  --color-whatsapp-ink: var(--whatsapp-ink);
 
   /* shadcn contract */
   --color-background: var(--background);
@@ -285,5 +300,97 @@
       var(--brand-line) 85%,
       transparent
     );
+  }
+
+  /* A row that has just arrived over Realtime, fading back to the table
+     surface. Written as a keyframe on the design token rather than as a
+     JS-driven colour animation: Framer Motion interpolates resolved colours,
+     not `var(--…)`, so animating it in JS would mean hard-coding one hex for
+     light and another for dark and switching on the theme. The token already
+     knows which mode it is in. */
+  @keyframes row-flash {
+    from {
+      background-color: var(--warning-subtle);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .animate-row-flash {
+    animation: row-flash 1.5s ease-out 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-row-flash {
+      animation-duration: 0.01ms;
+    }
+  }
+}
+
+/* ===========================================================================
+   Print — the case detail as an audit report
+   ---------------------------------------------------------------------------
+   The shell's chrome is hidden by `print:hidden` at the component level; this
+   handles what a utility class cannot.
+
+   The light palette is re-asserted for `.dark` too. A printer does not paint
+   the page background, so printing from dark mode would put near-white ink on
+   white paper — a blank sheet where the audit trail should be. Forcing the
+   light tokens is the difference between a readable report and an empty one.
+
+   Fills are dropped and borders kept, so a status chip still reads as a chip
+   without spending a merchant's toner on a solid block of colour.
+   =========================================================================== */
+
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+
+    --bg-base: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-subtle: #ffffff;
+    --bg-inset: #ffffff;
+
+    --border-subtle: #b8b2a6;
+    --border-strong: #8a8175;
+
+    --text-primary: #000000;
+    --text-secondary: #2b2721;
+    --text-tertiary: #4a453c;
+
+    --brand: #6b4f10;
+    --success: #14532d;
+    --warning: #713f12;
+    --danger: #7f1d1d;
+    --info: #1e3a8a;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  /* No filled surfaces on paper — outlines and text carry the structure. */
+  *,
+  *::before,
+  *::after {
+    background-image: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  [class*="bg-"] {
+    background-color: transparent !important;
+  }
+
+  /* Chips lose their fill, so they need an outline to stay chips. */
+  [class*="rounded-4xl"] {
+    border: 1px solid var(--border-strong) !important;
+  }
+
+  a[href]::after {
+    content: "";
   }
 }

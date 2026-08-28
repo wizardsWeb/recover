@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { PlaybookEmptyArms } from "@/components/empty-states/PlaybookEmptyArms";
 import { PageHeader } from "@/components/shell/PageHeader";
 import type { BanditArmPosterior, PlaybookDetail } from "@/lib/api/playbooks";
 import { getBanditPosteriors, getPlaybook } from "@/lib/api/playbooks.server";
@@ -161,9 +162,7 @@ export default async function PlaybookDetailPage({
             </table>
           </div>
         ) : (
-          <p className="py-4 text-center text-xs text-ink-faint">
-            No arm history yet. Load the simulator fixtures to seed demo priors.
-          </p>
+          <PlaybookEmptyArms />
         )}
 
         <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-hairline pt-3 text-[11px] text-ink-faint">

@@ -28,11 +28,11 @@ export function AppShell({
   defaultSidebarCollapsed,
 }: AppShellProps) {
   return (
-    <div className="flex h-dvh overflow-hidden bg-base">
+    <div className="flex h-dvh overflow-hidden bg-base print:block print:h-auto print:overflow-visible">
       <Sidebar showDevTools={showDevTools} defaultCollapsed={defaultSidebarCollapsed} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header email={email} businessName={businessName} />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto print:overflow-visible">
           <PageContainer>{children}</PageContainer>
         </main>
       </div>

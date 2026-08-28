@@ -40,10 +40,20 @@ export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
     <aside
       className={cn(
         "flex shrink-0 flex-col border-r border-hairline bg-elevated transition-[width] duration-200",
-        collapsed ? "w-16" : "w-60",
+        // Below `lg` the rail is icon-only whatever the stored preference says.
+        // Done in CSS rather than by measuring the viewport in JS: a media
+        // query cannot be read during SSR, so a JS version renders the wide
+        // sidebar first and snaps narrow after hydration.
+        "print:hidden",
+        collapsed ? "w-16" : "w-16 lg:w-60",
       )}
     >
-      <div className={cn("flex h-14 items-center border-b border-hairline", collapsed ? "justify-center px-2" : "px-5")}>
+      <div
+        className={cn(
+          "flex h-14 items-center border-b border-hairline",
+          collapsed ? "justify-center px-2" : "justify-center px-2 lg:justify-start lg:px-5",
+        )}
+      >
         {collapsed ? (
           <Link href="/app" aria-label="Recover — dashboard" className="font-display text-lg font-semibold text-brand">
             R
@@ -66,14 +76,14 @@ export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
                 // The 2px left rule is drawn as a transparent border on every
                 // item so the label never shifts when the active one gains it.
                 "flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors",
-                collapsed && "justify-center px-0",
+                collapsed ? "justify-center px-0" : "justify-center px-0 lg:justify-start lg:px-3",
                 active
                   ? "border-l-brand bg-brand-subtle font-medium text-brand"
                   : "text-ink-muted hover:bg-subtle hover:text-ink",
               )}
             >
               <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
-              {!collapsed && <span className="truncate">{label}</span>}
+              {!collapsed && <span className="hidden truncate lg:inline">{label}</span>}
             </Link>
           );
         })}
@@ -82,7 +92,7 @@ export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
       {showDevTools && (
         <div className="border-t border-hairline p-2">
           {!collapsed && (
-            <p className="px-3 pt-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-ink-faint uppercase">
+            <p className="hidden px-3 pt-1 pb-2 text-[11px] font-medium tracking-[0.1em] text-ink-faint uppercase lg:block">
               Development
             </p>
           )}
@@ -91,16 +101,16 @@ export function Sidebar({ showDevTools, defaultCollapsed }: SidebarProps) {
             title={collapsed ? "Simulator" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-subtle hover:text-ink",
-              collapsed && "justify-center px-0",
+              collapsed ? "justify-center px-0" : "justify-center px-0 lg:justify-start lg:px-3",
             )}
           >
             <FlaskConical className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
-            {!collapsed && <span>Simulator</span>}
+            {!collapsed && <span className="hidden lg:inline">Simulator</span>}
           </Link>
         </div>
       )}
 
-      <div className="border-t border-hairline p-2">
+      <div className="hidden border-t border-hairline p-2 lg:block">
         <button
           type="button"
           onClick={toggle}
