@@ -242,8 +242,20 @@ async def run_agent_loop(
         log.info("step_diagnose_complete", root_cause=diagnosis.root_cause)
 
         # ── STEP 3: UPLIFT CHECK ───────────────────────────────────────
-        # PHASE 9 replaces the stub with a T-learner over a real holdout group.
-        uplift = await run_uplift_check(case, diagnosis.model_dump())
+        # A T-learner fitted against the holdout group, read as a stored
+        # snapshot. The context vector is the one frozen above, so a case is
+        # scored on the conditions it arrived under. With no snapshot yet the
+        # check proceeds — a merchant with no controls has nothing to estimate
+        # from, and going quiet would look like a working product that recovers
+        # nothing.
+        uplift = await run_uplift_check(
+            case,
+            diagnosis.model_dump(),
+            supabase_client=supabase_client,
+            context_features=context_features,
+            merchant_id=merchant_id,
+            playbook=playbook,
+        )
         steps_completed.append(StepName.UPLIFT_CHECK)
         await audit.log_uplift_verdict(
             supabase_client, case_id, merchant_id, uplift.model_dump(), trace_id
