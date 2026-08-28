@@ -16,7 +16,9 @@ and keeps snake_case in Python, so the frontend's types read the same as
 ``Merchant``'s do.
 """
 
-from typing import Annotated, Any, cast
+import asyncio
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, Literal, cast
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
@@ -25,14 +27,25 @@ from pydantic.alias_generators import to_camel
 
 from app.agent.core import process_event
 from app.config import get_settings
-from app.db import get_service_client
+from app.db import get_redis_client, get_service_client
 from app.deps import CurrentUserId, UserSupabase
 from app.logging import get_logger
+from app.ml.network.aggregator import IST, normalise_bank, normalise_method
+from app.ml.network.detector import publish_alert
+from app.ml.uplift.model import train_uplift_model
 from app.simulator import loader, reply_generator
+from app.simulator.network_seed import DEFAULT_DAYS, MAX_DAYS, seed_network_stats
 from app.simulator.scenarios import (
     DEFERRED_SCENARIOS,
     SCENARIO_METADATA,
     SCENARIO_REGISTRY,
+)
+from app.simulator.uplift_seed import (
+    DEFAULT_HOLDOUT_RATE,
+    DEFAULT_TOTAL_CASES,
+    MAX_TOTAL_CASES,
+    PLAYBOOK_WEIGHTS,
+    seed_uplift_history,
 )
 
 log = get_logger(__name__)
@@ -188,6 +201,18 @@ class SimulatorStatusResponse(CamelModel):
     fixtures_loaded: bool
     recent_events: list[RecentEvent]
     in_flight_cases: list[InFlightCase]
+
+
+class HoldoutResolveRequest(CamelModel):
+    case_id: str
+    outcome: str = Field(pattern="^(recovered|not_recovered)$")
+    amount_cents: int = Field(default=0, ge=0)
+
+
+class HoldoutResolveResponse(CamelModel):
+    case_id: str
+    outcome: str
+    amount_cents: int
 
 
 # ---------------------------------------------------------------------------
@@ -479,3 +504,428 @@ def simulator_status(user_id: CurrentUserId, supabase: UserSupabase) -> Simulato
             for row in _rows(cases)
         ],
     )
+
+
+@router.post("/holdout/resolve", response_model=HoldoutResolveResponse)
+def resolve_holdout(
+    payload: HoldoutResolveRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> HoldoutResolveResponse:
+    """Record what happened to a control case.
+
+    In production this is not an endpoint at all — a holdout's outcome is
+    observed, by a payment arriving or failing to. There is nothing to observe
+    in a simulator, so the outcome is stated instead. It is the only way to
+    produce a trained model for the demo, and it is why this lives behind the
+    dev-environment gate with the rest of the fabrication tools.
+
+    The case row is updated alongside the holdout row. A recovered control still
+    recovered money, and the ROI page's treated-versus-control comparison reads
+    recovery from the case table for both groups — leaving the case at zero
+    would make every control look like a failure and inflate measured uplift.
+    """
+    holdout = (
+        supabase.table("uplift_holdouts")
+        .select("id, case_id")
+        .eq("case_id", payload.case_id)
+        .limit(1)
+        .execute()
+    )
+    if not _rows(holdout):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No holdout row for that case. Only control cases have outcomes to set.",
+        )
+
+    recovered = payload.outcome == "recovered"
+    now = datetime.now(UTC).isoformat()
+
+    supabase.table("uplift_holdouts").update(
+        {
+            "outcome": payload.outcome,
+            "outcome_amount_cents": payload.amount_cents if recovered else 0,
+            "updated_at": now,
+        }
+    ).eq("case_id", payload.case_id).execute()
+
+    supabase.table("recovery_cases").update(
+        {
+            "amount_recovered_cents": payload.amount_cents if recovered else 0,
+            "closed_at": now,
+            "updated_at": now,
+        }
+    ).eq("id", payload.case_id).execute()
+
+    log.info(
+        "holdout_resolved",
+        case_id=payload.case_id,
+        outcome=payload.outcome,
+        amount_cents=payload.amount_cents,
+    )
+    return HoldoutResolveResponse(
+        case_id=payload.case_id,
+        outcome=payload.outcome,
+        amount_cents=payload.amount_cents if recovered else 0,
+    )
+
+
+class UpliftSeedRequest(CamelModel):
+    """Knobs on the corpus, all optional — the defaults are the demo."""
+
+    total_cases: int = Field(default=DEFAULT_TOTAL_CASES, ge=40, le=MAX_TOTAL_CASES)
+    holdout_rate: float = Field(default=DEFAULT_HOLDOUT_RATE, gt=0.0, lt=0.9)
+    #: Fixes the draw so a rehearsed demo shows the same numbers twice.
+    seed: int | None = Field(default=None)
+
+
+class SeededPlaybook(CamelModel):
+    playbook: str
+    status: str
+    treated_samples: int = 0
+    control_samples: int = 0
+    mean_cate: float | None = None
+
+
+class UpliftSeedResponse(CamelModel):
+    cases: int
+    treated: int
+    controls: int
+    customers: int
+    models: list[SeededPlaybook]
+
+
+@router.post("/uplift/seed", response_model=UpliftSeedResponse)
+async def seed_uplift(
+    payload: UpliftSeedRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> UpliftSeedResponse:
+    """Manufacture a treated/control history, then fit a model on it.
+
+    The two halves are one endpoint because neither is useful alone: a corpus
+    with no model shows an empty ROI page, and training with nothing to train on
+    reports `insufficient_data` four times. Whoever is running the demo wants the
+    finished state.
+
+    Seeding and fitting both run in a worker thread. The inserts are blocking
+    HTTP calls inside the Supabase client and the fits are CPU-bound sklearn —
+    several hundred rows and four models is long enough on the event loop to
+    stall every other request on the process.
+    """
+    summary = await asyncio.to_thread(
+        seed_uplift_history,
+        supabase,
+        user_id,
+        total_cases=payload.total_cases,
+        holdout_rate=payload.holdout_rate,
+        seed=payload.seed,
+    )
+
+    models: list[SeededPlaybook] = []
+    for playbook in PLAYBOOK_WEIGHTS:
+        outcome = await asyncio.to_thread(train_uplift_model, supabase, user_id, playbook)
+        models.append(
+            SeededPlaybook(
+                playbook=playbook,
+                status=str(outcome.get("status")),
+                treated_samples=int(outcome.get("treated_samples") or 0),
+                control_samples=int(outcome.get("control_samples") or 0),
+                mean_cate=outcome.get("mean_cate"),
+            )
+        )
+
+    log.info(
+        "uplift_seed_complete",
+        merchant_id=user_id,
+        **summary,
+        statuses=[m.status for m in models],
+    )
+    return UpliftSeedResponse(**summary, models=models)
+
+
+# ── Network downtime (B3) ──────────────────────────────────────────────
+
+#: What each severity looks like as a success rate, and the story each tells.
+#: Not derived from the z-score bands on purpose — the detector infers severity
+#: from a rate, and this is the inverse, so deriving one from the other would
+#: make the simulator agree with the detector by construction and prove nothing.
+_DOWNTIME_RATES: dict[str, float] = {
+    "critical": 0.20,
+    "high": 0.41,
+    "medium": 0.58,
+}
+
+#: Sample size stamped on the manufactured stats row. Comfortably above the
+#: detector's `MIN_ALERT_SAMPLES` so the simulated outage is one the real
+#: detector would also have called, rather than one only the simulator believes.
+_DOWNTIME_SAMPLE_SIZE = 240
+
+#: The rate a bank returns to when the outage lifts. Above the alert's own
+#: baseline, so `find_resolved_alerts` would also clear it on the next poll —
+#: the scheduled resolution and the real one agree instead of racing.
+_RECOVERED_RATE = 0.86
+
+#: Strong references to pending auto-resolution tasks. The event loop holds only
+#: a weak reference to a task nobody keeps, so a fire-and-forget timer can be
+#: collected mid-sleep. It does not raise; the outage simply never lifts, and
+#: the guardrail goes on blocking retries into a bank that came back.
+_PENDING_RESOLUTIONS: set[asyncio.Task[None]] = set()
+
+
+class DowntimeRequest(CamelModel):
+    bank: str = Field(min_length=1, max_length=32)
+    method: str = Field(min_length=1, max_length=32)
+    severity: Literal["medium", "high", "critical"] = "high"
+    #: Bounded at both ends: a zero-minute outage resolves before anyone sees
+    #: it, and an eight-hour one outlives the process that would have lifted it.
+    duration_minutes: int = Field(default=30, ge=1, le=240)
+
+
+class DowntimeResponse(CamelModel):
+    alert_id: str
+    bank: str
+    method: str
+    severity: str
+    success_rate: float
+    will_resolve_at: str
+
+
+async def _lift_downtime(
+    supabase_client: Any,
+    alert_id: str,
+    bank: str,
+    method: str,
+    delay_seconds: float,
+) -> None:
+    """Wait out the outage, then clear it and say so.
+
+    Everything is suppressed except cancellation. This runs detached from any
+    request, so an exception here would surface only as a task-exception warning
+    in the logs — and the visible symptom would be an outage that never lifts.
+    """
+    try:
+        await asyncio.sleep(delay_seconds)
+        now = datetime.now(UTC).isoformat()
+
+        supabase_client.table("network_alerts").update({"resolved_at": now, "updated_at": now}).eq(
+            "id", alert_id
+        ).execute()
+        _write_network_stat(supabase_client, bank, method, _RECOVERED_RATE)
+
+        await publish_alert(
+            get_redis_client(),
+            {
+                "type": "alert_resolved",
+                "alert": {
+                    "id": alert_id,
+                    "affected_bank": bank,
+                    "affected_method": method,
+                    "resolved_at": now,
+                    "recovered_rate": _RECOVERED_RATE,
+                },
+            },
+        )
+        log.info("simulated_downtime_lifted", alert_id=alert_id, bank=bank, method=method)
+    except asyncio.CancelledError:
+        # Shutdown. The alert stays open in the database, which is the honest
+        # state: nothing observed it recovering.
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("simulated_downtime_lift_error", alert_id=alert_id, error=str(exc))
+
+
+def _write_network_stat(supabase_client: Any, bank: str, method: str, rate: float) -> None:
+    """Stamp a reading for this instrument at the current IST hour.
+
+    Written through the same shape the aggregator uses so the heatmap, the
+    detector and the resolver all see one kind of row. A simulator that invented
+    its own row shape would demo beautifully and diverge from production at the
+    first real poll.
+    """
+    now = datetime.now(UTC)
+    payload = {
+        "bank": bank,
+        "method": method,
+        "hour_of_day": datetime.now(IST).hour,
+        "day_of_week": datetime.now(IST).weekday(),
+        "success_rate": rate,
+        "sample_size": _DOWNTIME_SAMPLE_SIZE,
+        "window_start": (now - timedelta(minutes=10)).isoformat(),
+        "window_end": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    existing = _rows(
+        supabase_client.table("network_stats")
+        .select("id")
+        .eq("bank", bank)
+        .eq("method", method)
+        .eq("hour_of_day", payload["hour_of_day"])
+        .eq("day_of_week", payload["day_of_week"])
+        # `window_end`, for the same reason the aggregator uses it: the window
+        # trails the reading, so a start-keyed match misses its own row in the
+        # first ten minutes of every hour.
+        .gte("window_end", now.replace(minute=0, second=0, microsecond=0).isoformat())
+        .limit(1)
+        .execute()
+    )
+    if existing:
+        supabase_client.table("network_stats").update(payload).eq("id", existing[0]["id"]).execute()
+    else:
+        supabase_client.table("network_stats").insert(payload).execute()
+
+
+@router.post("/network/downtime", response_model=DowntimeResponse)
+async def simulate_downtime(
+    payload: DowntimeRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> DowntimeResponse:
+    """Take a bank down for a fixed window — the B3 scenario.
+
+    Writes the same two rows a real detection writes: the alert the guardrail
+    blocks on, and the degraded stats reading that justifies it. Both matter.
+    An alert with no stats behind it shows a banner and an unexplained heatmap;
+    a stats row with no alert degrades the grid and blocks nothing.
+
+    Both writes go through the **service-role** client, like the network seeder
+    and unlike everything else in this router. `network_alerts` and
+    `network_stats` are global reference tables: their RLS grants authenticated
+    users `SELECT` and nothing else, because a merchant has no business writing
+    a network-wide outage. The caller's own client is still used to *read* — the
+    duplicate-alert check below — so the endpoint reads with exactly the
+    privileges the dashboard has.
+
+    The alert is inserted **before** anything is published. The row is what stops
+    retries; the Redis message only moves a banner, and publishing first would
+    open a window where the dashboard says a bank is down while the agent is
+    still retrying into it.
+    """
+    service = get_service_client()
+    bank = normalise_bank(payload.bank)
+    method = normalise_method(payload.method)
+    rate = _DOWNTIME_RATES[payload.severity]
+    now = datetime.now(UTC)
+    resolves_at = now + timedelta(minutes=payload.duration_minutes)
+
+    existing = _rows(
+        supabase.table("network_alerts")
+        .select("id")
+        .eq("affected_bank", bank)
+        .eq("affected_method", method)
+        .is_("resolved_at", "null")
+        .limit(1)
+        .execute()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{bank} {method} is already in a simulated outage.",
+        )
+
+    alert: dict[str, Any] = {
+        "alert_type": "downtime",
+        "affected_bank": bank,
+        "affected_method": method,
+        "severity": payload.severity,
+        "z_score": None,
+        "sample_size": _DOWNTIME_SAMPLE_SIZE,
+        "affected_merchants_count": _network_merchant_count(service),
+        "network_wide_success_rate": rate,
+        "baseline_rate": 0.82,
+        "detected_at": now.isoformat(),
+        "resolved_at": None,
+        "metadata": {
+            "source": "simulator",
+            "duration_minutes": payload.duration_minutes,
+            "will_resolve_at": resolves_at.isoformat(),
+        },
+    }
+    written = _rows(service.table("network_alerts").insert(alert).execute())
+    alert_id = str(written[0]["id"]) if written else ""
+
+    _write_network_stat(service, bank, method, rate)
+
+    await publish_alert(
+        get_redis_client(),
+        {"type": "alert_fired", "alert": {**alert, "id": alert_id}},
+    )
+
+    task = asyncio.create_task(
+        _lift_downtime(service, alert_id, bank, method, payload.duration_minutes * 60)
+    )
+    _PENDING_RESOLUTIONS.add(task)
+    task.add_done_callback(_PENDING_RESOLUTIONS.discard)
+
+    log.info(
+        "simulated_downtime_started",
+        alert_id=alert_id,
+        bank=bank,
+        method=method,
+        severity=payload.severity,
+        duration_minutes=payload.duration_minutes,
+    )
+    return DowntimeResponse(
+        alert_id=alert_id,
+        bank=bank,
+        method=method,
+        severity=payload.severity,
+        success_rate=rate,
+        will_resolve_at=resolves_at.isoformat(),
+    )
+
+
+def _network_merchant_count(supabase_client: Any) -> int:
+    """How wide to claim the outage is.
+
+    A count and nothing else — the same posture as the real detector's
+    `affected_merchants_count`, where a cardinality is the only cross-tenant
+    fact that ever leaves. Floored at a plausible network size, because the
+    sentence the demo is making ("this is hitting eight of you") is a claim
+    about a network that a single-tenant fixture cannot produce, and a simulator
+    rendering "affecting 1 merchant" would be simulating the wrong thing.
+    """
+    rows = _rows(supabase_client.table("merchants").select("id").limit(50).execute())
+    return max(len(rows), 8)
+
+
+class NetworkSeedRequest(CamelModel):
+    days: int = Field(default=DEFAULT_DAYS, ge=1, le=MAX_DAYS)
+    #: Fixes the draw so a rehearsed demo shows the same heatmap twice.
+    seed: int | None = Field(default=None)
+
+
+class NetworkSeedResponse(CamelModel):
+    rows: int
+    cleared: int
+    days: int
+    instruments: int
+    banks: list[str]
+    methods: list[str]
+
+
+@router.post("/network/seed", response_model=NetworkSeedResponse)
+async def seed_network(
+    payload: NetworkSeedRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> NetworkSeedResponse:
+    """Populate the heatmap with a week of plausible payment behaviour.
+
+    Writes through the **service-role** client, unlike everything else in this
+    router. `network_stats` has no merchant column, so there is no RLS policy a
+    user client could satisfy — the table is cross-tenant by design, and the
+    dev-environment gate on this router is what keeps that safe rather than a
+    per-row check that has nothing to check.
+
+    Off the event loop: roughly 1,700 rows in batches is blocking Supabase I/O,
+    and holding the loop for it would stall every other request on the process.
+    """
+    summary = await asyncio.to_thread(
+        seed_network_stats,
+        get_service_client(),
+        days=payload.days,
+        seed=payload.seed,
+    )
+    log.info("network_seed_requested", merchant_id=user_id, **summary)
+    return NetworkSeedResponse(**summary)

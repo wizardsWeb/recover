@@ -39,6 +39,21 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "metadata": {},
     },
     "payment_methods": {"bin": None, "bank": None, "success_rate_90d": None, "metadata": {}},
+    # Postgres hands these back as NULL on an insert that omits them; the fake
+    # would otherwise leave the keys missing entirely, so code that reads
+    # `row["outcome"]` passes here and raises KeyError against a real database.
+    "uplift_holdouts": {
+        "holdout_reason": None,
+        "outcome": None,
+        "outcome_amount_cents": None,
+        "context_features": {},
+        "used_in_training": False,
+    },
+    "uplift_model_snapshots": {
+        "feature_importances": {},
+        "bucket_uplifts": {},
+        "training_sample_size": 0,
+    },
     "events": {"customer_id": None, "processed_at": None},
     "recovery_cases": {
         "status": "open",
@@ -83,6 +98,16 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "affected_method": None,
         "resolved_at": None,
         "metadata": None,
+        "z_score": None,
+        "sample_size": None,
+        "affected_merchants_count": None,
+        "network_wide_success_rate": None,
+        "baseline_rate": None,
+    },
+    "network_stats": {
+        "merchant_size_class": None,
+        "success_rate": 0.0,
+        "sample_size": 0,
     },
     "audit_events": {"case_id": None, "details": None, "trace_id": None},
     "llm_cache": {

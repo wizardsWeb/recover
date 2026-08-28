@@ -31,6 +31,19 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
+    #: Redis, for the network alert fan-out. Empty falls back to an in-process
+    #: `fakeredis` so local development works with nothing installed — see
+    #: `get_redis_client`. Production always sets this.
+    REDIS_URL: str = ""
+
+    #: Whether the background network poller runs. On in production and local
+    #: development; off in tests, where a loop polling a live Supabase project
+    #: on every `TestClient` startup would be both slow and non-deterministic.
+    NETWORK_POLLER_ENABLED: bool = True
+
+    #: Seconds between network aggregation passes.
+    NETWORK_POLL_INTERVAL_SECONDS: int = 60
+
     @property
     def allowed_origins(self) -> list[str]:
         """``ALLOWED_ORIGINS`` as a list, so it can be a comma-separated env var."""

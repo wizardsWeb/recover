@@ -480,6 +480,13 @@ async def _dispatch(
         return "razorpay_subscriptions_simulated", {
             "request_payload": {
                 "subscription_id": metadata.get("subscription_id", "sub_unknown"),
+                # The instrument this retry targets. Recorded because the
+                # network aggregator reads it: a retry outcome only says
+                # something about a bank if the row remembers which bank it
+                # went to, and joining back through the case would tie the
+                # cross-merchant read to per-merchant tables.
+                "bank": metadata.get("bank"),
+                "method": metadata.get("method"),
                 "idempotency_key": trace_id,
             },
             "response_payload": {"status": "queued", "retry_scheduled": True},

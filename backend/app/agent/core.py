@@ -43,9 +43,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.agent import audit
+from app.agent.bandit.context import extract_context_vector
 from app.agent.bandit.reward import post_reward
 from app.agent.guardrail import run_guardrail
 from app.agent.handoff import create_handoff_attempt
+from app.agent.holdout import HOLDOUT_RATE, assign_holdout, should_hold_out
 from app.agent.models import (
     ActionType,
     AgentLoopResult,
@@ -68,6 +70,7 @@ from app.agent.steps.learn import run_learn
 from app.agent.steps.listen import run_listen
 from app.agent.steps.uplift_check import run_uplift_check
 from app.logging import get_logger
+from app.ml.uplift.training import schedule_retrain
 
 logger = get_logger(__name__)
 
@@ -176,6 +179,49 @@ async def run_agent_loop(
         )
         log.info("step_detect_complete", playbook=playbook)
 
+        # ── HOLDOUT ────────────────────────────────────────────────────
+        # The control group is chosen here, before anything has been decided or
+        # sent, and only on the pass that opened the case. A case that is
+        # already in flight has been acted on, and acting on a control is what
+        # makes it stop being one.
+        #
+        # The context vector is extracted once and reused: the uplift check
+        # needs it, and freezing it here means the holdout row records the
+        # conditions the case actually arrived under rather than the conditions
+        # at training time.
+        context_features = extract_context_vector(case, customer, event)
+        if should_hold_out(case):
+            await assign_holdout(supabase_client, case_id, merchant_id, context_features)
+            await audit.log_agent_step(
+                supabase_client,
+                case_id,
+                merchant_id,
+                "detect",
+                "system",
+                "assigned_to_holdout",
+                {
+                    "holdout_rate": HOLDOUT_RATE,
+                    "context_features": context_features,
+                    "reason": (
+                        "Control group — no intervention, so the outcome measures what "
+                        "would have happened anyway."
+                    ),
+                },
+                trace_id,
+            )
+            steps_completed.append(StepName.AUDIT)
+            log.info("case_assigned_to_holdout")
+            # No reward is posted and no arm is pulled. `post_reward` also
+            # refuses holdouts, but the case never reaches it: a control that
+            # taught the bandit would be a control that changed the policy.
+            return AgentLoopResult(
+                case_id=case_id,
+                trace_id=trace_id,
+                playbook=playbook_enum,
+                steps_completed=steps_completed,
+                final_status=CaseStatus.HOLDOUT,
+            )
+
         # ── STEP 2: DIAGNOSE ───────────────────────────────────────────
         # Gemini extracts the root cause; the playbook stub answers if it can't.
         # The event and the customer row go in because the evidence lives there —
@@ -197,8 +243,20 @@ async def run_agent_loop(
         log.info("step_diagnose_complete", root_cause=diagnosis.root_cause)
 
         # ── STEP 3: UPLIFT CHECK ───────────────────────────────────────
-        # PHASE 9 replaces the stub with a T-learner over a real holdout group.
-        uplift = await run_uplift_check(case, diagnosis.model_dump())
+        # A T-learner fitted against the holdout group, read as a stored
+        # snapshot. The context vector is the one frozen above, so a case is
+        # scored on the conditions it arrived under. With no snapshot yet the
+        # check proceeds — a merchant with no controls has nothing to estimate
+        # from, and going quiet would look like a working product that recovers
+        # nothing.
+        uplift = await run_uplift_check(
+            case,
+            diagnosis.model_dump(),
+            supabase_client=supabase_client,
+            context_features=context_features,
+            merchant_id=merchant_id,
+            playbook=playbook,
+        )
         steps_completed.append(StepName.UPLIFT_CHECK)
         await audit.log_uplift_verdict(
             supabase_client, case_id, merchant_id, uplift.model_dump(), trace_id
@@ -475,6 +533,12 @@ async def run_agent_loop(
             await _post_close_reward(supabase_client, case, final_status, trace_id)
 
         _mark_event_processed(supabase_client, event)
+
+        # The uplift model refits in the background once enough new outcomes
+        # have landed. Fired after the pass is otherwise finished and never
+        # awaited: a model refit is a reporting concern, and the recovery this
+        # pass performed must not wait on it or be undone by it failing.
+        schedule_retrain(supabase_client, merchant_id, playbook)
 
         log.info(
             "agent_loop_complete",

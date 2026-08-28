@@ -116,7 +116,10 @@ async def test_loop_runs_all_nine_steps_and_leaves_a_full_trail(
     assert stored_case is not None
     assert stored_case["status"] == "in_flight"
     assert stored_case["diagnosis"]["root_cause"] == "price_sensitivity_at_checkout"
-    assert stored_case["uplift_bucket"] == "persuadable"
+    # No trained snapshot in this fixture, so the uplift check has nothing to
+    # estimate from and says so. "unknown" proceeds — the pre-Phase-9 behaviour —
+    # rather than defaulting to a bucket the model never computed.
+    assert stored_case["uplift_bucket"] == "unknown"
 
     stored_event = db.find_one("events", event["id"])
     assert stored_event is not None and stored_event["processed_at"] is not None

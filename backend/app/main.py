@@ -1,8 +1,11 @@
 """FastAPI application entrypoint."""
 
+import asyncio
+import contextlib
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
@@ -11,18 +14,75 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from app.api import analytics, audit, cases, events, health, merchants, playbooks, simulator
+from app.api import (
+    analytics,
+    audit,
+    cases,
+    events,
+    health,
+    merchants,
+    ml,
+    network,
+    playbooks,
+    simulator,
+)
 from app.config import get_settings
+from app.db import get_redis_client, get_service_client
 from app.logging import configure_logging, get_logger
+from app.ml.network.poller import run_network_poller
 
 configure_logging()
 log = get_logger(__name__)
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Own the background network poller for the life of the process.
+
+    The task handle is held in a local rather than fired and forgotten: the
+    event loop keeps only a weak reference to a task nobody holds, so a
+    fire-and-forget poller can be garbage-collected mid-pass — silently, since
+    it does not raise. It simply stops, and nothing clears a network alert
+    again.
+
+    Cancellation on shutdown is awaited rather than merely requested. Without
+    the await the process can exit while the poller is mid-write, leaving a
+    half-aggregated window behind.
+    """
+    if not settings.NETWORK_POLLER_ENABLED:
+        log.info("network_poller_disabled", environment=settings.ENVIRONMENT)
+        yield
+        return
+
+    task = asyncio.create_task(
+        run_network_poller(
+            get_service_client(),
+            get_redis_client(),
+            interval_seconds=settings.NETWORK_POLL_INTERVAL_SECONDS,
+        )
+    )
+    log.info(
+        "network_poller_scheduled",
+        interval_seconds=settings.NETWORK_POLL_INTERVAL_SECONDS,
+        # Says out loud which Redis is in play: an in-process fake reaches only
+        # subscribers in this worker, which is correct on a laptop and wrong
+        # anywhere with more than one replica.
+        redis="configured" if settings.REDIS_URL.strip() else "in-process fake",
+    )
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 app = FastAPI(
     title="Recover API",
     description="AI revenue-recovery agent for Razorpay merchants.",
     version=settings.VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -106,6 +166,8 @@ app.include_router(cases.router)
 app.include_router(playbooks.router)
 app.include_router(audit.router)
 app.include_router(analytics.router)
+app.include_router(ml.router)
+app.include_router(network.router)
 # The simulator router refuses to serve outside a development environment;
 # see the dependency on `require_dev_environment`.
 app.include_router(simulator.router)

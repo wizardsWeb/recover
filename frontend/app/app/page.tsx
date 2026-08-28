@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
 import { DashboardLiveTicker } from "@/components/domain/DashboardLiveTicker";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
+import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
 import { FirstTimeDashboard } from "@/components/empty-states/FirstTimeDashboard";
 import { PageHeader } from "@/components/shell/PageHeader";
 import type { CaseListItem, Overview } from "@/lib/api/cases";
@@ -64,6 +65,10 @@ export default async function DashboardPage() {
               className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-subtle"
             >
               <CaseStatusBadge status={row.status} />
+              {/* Dropped on narrow screens rather than truncated: four badges
+                and an amount in one row leaves the customer name — the thing
+                the row is actually for — with nothing left to show. */}
+              <UpliftBucketBadge bucket={row.uplift_bucket} className="hidden sm:inline-flex" />
               <span className="flex-1 truncate text-sm font-medium text-ink">
                 {row.customers?.name ?? "Unknown customer"}
               </span>
