@@ -247,8 +247,7 @@ def find_resolved_alerts(supabase_client: Any) -> list[dict[str, Any]]:
         for row in _rows(
             supabase_client.table("network_alerts")
             .select(
-                "id, affected_bank, affected_method, baseline_rate, detected_at, "
-                "severity, metadata"
+                "id, affected_bank, affected_method, baseline_rate, detected_at, severity, metadata"
             )
             .is_("resolved_at", "null")
             .limit(_MAX_ROWS)
@@ -284,9 +283,9 @@ def find_resolved_alerts(supabase_client: Any) -> list[dict[str, Any]]:
         if rate < baseline - RECOVERY_TOLERANCE:
             continue
 
-        supabase_client.table("network_alerts").update(
-            {"resolved_at": now, "updated_at": now}
-        ).eq("id", alert["id"]).execute()
+        supabase_client.table("network_alerts").update({"resolved_at": now, "updated_at": now}).eq(
+            "id", alert["id"]
+        ).execute()
         resolved.append({**alert, "resolved_at": now, "recovered_rate": round(rate, 3)})
         logger.info(
             "network_alert_resolved", bank=bank, method=method, recovered_rate=round(rate, 3)
