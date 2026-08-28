@@ -45,6 +45,7 @@ from typing import Any
 from app.agent import audit
 from app.agent.bandit.context import extract_context_vector
 from app.agent.bandit.reward import post_reward
+from app.agent.causal_dag.edges import update_dag_edges
 from app.agent.guardrail import run_guardrail
 from app.agent.handoff import create_handoff_attempt
 from app.agent.holdout import HOLDOUT_RATE, assign_holdout, should_hold_out
@@ -533,6 +534,17 @@ async def run_agent_loop(
             await _post_close_reward(supabase_client, case, final_status, trace_id)
 
         _mark_event_processed(supabase_client, event)
+
+        # Fold this case's diagnosis into the empirical edge counts, so the
+        # hand-written likelihoods in `causal_dag.definitions` can eventually be
+        # checked against what actually happened. Awaited rather than fired and
+        # forgotten — it is a handful of writes and the pass is over — but it
+        # swallows its own failures, because a statistics table must not be able
+        # to fail a recovery that has already happened.
+        if diagnosis is not None:
+            await update_dag_edges(
+                supabase_client, merchant_id, playbook, diagnosis.model_dump(mode="json")
+            )
 
         # The uplift model refits in the background once enough new outcomes
         # have landed. Fired after the pass is otherwise finished and never

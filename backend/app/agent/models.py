@@ -123,6 +123,17 @@ class DiagnosisResult(BaseModel):
     alternative_hypotheses: list[dict[str, Any]]
     risk_factors: list[str]
     inferred_salary_date: str | None = None
+    #: True when the posterior came from a causal-DAG traversal rather than from
+    #: the model alone. Drives the case detail's "Causal Reasoning" tab, which
+    #: has nothing to draw for a case diagnosed before Phase 12.
+    dag_traversal_used: bool = False
+    #: The boolean features the traversal ran on. Absent for LLM-only and
+    #: fallback diagnoses — and absent is not "all false", which is why the
+    #: edge recorder skips a case rather than counting one.
+    observed_features: dict[str, bool] = Field(default_factory=dict)
+    #: Which revision of the graph produced this. A posterior is only
+    #: interpretable against the table it came from.
+    dag_version: str | None = None
     is_stub: bool = True  # False once Phase 5 LLM is wired
 
 
