@@ -98,6 +98,16 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
         "affected_method": None,
         "resolved_at": None,
         "metadata": None,
+        "z_score": None,
+        "sample_size": None,
+        "affected_merchants_count": None,
+        "network_wide_success_rate": None,
+        "baseline_rate": None,
+    },
+    "network_stats": {
+        "merchant_size_class": None,
+        "success_rate": 0.0,
+        "sample_size": 0,
     },
     "audit_events": {"case_id": None, "details": None, "trace_id": None},
     "llm_cache": {
