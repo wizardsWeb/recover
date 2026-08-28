@@ -113,6 +113,23 @@ export function fetchAlerts(): Promise<AlertsResponse> {
   return request<AlertsResponse>("/api/network/alerts");
 }
 
+export interface NetworkSeedResponse {
+  rows: number;
+  cleared: number;
+  days: number;
+  instruments: number;
+  banks: string[];
+  methods: string[];
+}
+
+/** Dev-only: fill the heatmap with a week of plausible payment behaviour. */
+export function seedNetworkStats(days = 7): Promise<NetworkSeedResponse> {
+  return request<NetworkSeedResponse>("/api/simulator/network/seed", {
+    method: "POST",
+    body: JSON.stringify({ days }),
+  });
+}
+
 /** Dev-only: take a bank down for a fixed window. */
 export function triggerDowntime(payload: DowntimeRequest): Promise<DowntimeResponse> {
   return request<DowntimeResponse>("/api/simulator/network/downtime", {

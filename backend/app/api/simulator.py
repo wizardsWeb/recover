@@ -34,6 +34,7 @@ from app.ml.network.aggregator import IST, normalise_bank, normalise_method
 from app.ml.network.detector import publish_alert
 from app.ml.uplift.model import train_uplift_model
 from app.simulator import loader, reply_generator
+from app.simulator.network_seed import DEFAULT_DAYS, MAX_DAYS, seed_network_stats
 from app.simulator.scenarios import (
     DEFERRED_SCENARIOS,
     SCENARIO_METADATA,
@@ -873,3 +874,45 @@ def _network_merchant_count(supabase_client: Any) -> int:
     """
     rows = _rows(supabase_client.table("merchants").select("id").limit(50).execute())
     return max(len(rows), 8)
+
+
+class NetworkSeedRequest(CamelModel):
+    days: int = Field(default=DEFAULT_DAYS, ge=1, le=MAX_DAYS)
+    #: Fixes the draw so a rehearsed demo shows the same heatmap twice.
+    seed: int | None = Field(default=None)
+
+
+class NetworkSeedResponse(CamelModel):
+    rows: int
+    cleared: int
+    days: int
+    instruments: int
+    banks: list[str]
+    methods: list[str]
+
+
+@router.post("/network/seed", response_model=NetworkSeedResponse)
+async def seed_network(
+    payload: NetworkSeedRequest,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> NetworkSeedResponse:
+    """Populate the heatmap with a week of plausible payment behaviour.
+
+    Writes through the **service-role** client, unlike everything else in this
+    router. `network_stats` has no merchant column, so there is no RLS policy a
+    user client could satisfy — the table is cross-tenant by design, and the
+    dev-environment gate on this router is what keeps that safe rather than a
+    per-row check that has nothing to check.
+
+    Off the event loop: roughly 1,700 rows in batches is blocking Supabase I/O,
+    and holding the loop for it would stall every other request on the process.
+    """
+    summary = await asyncio.to_thread(
+        seed_network_stats,
+        get_service_client(),
+        days=payload.days,
+        seed=payload.seed,
+    )
+    log.info("network_seed_requested", merchant_id=user_id, **summary)
+    return NetworkSeedResponse(**summary)
