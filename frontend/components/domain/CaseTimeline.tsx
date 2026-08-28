@@ -341,11 +341,11 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative max-w-md rounded-lg rounded-tr-sm bg-[#dcf8c6] px-3 py-2 dark:bg-[#1f3320]">
+      <div className="relative max-w-md rounded-lg rounded-tr-sm bg-whatsapp-bubble px-3 py-2">
         <span className="absolute top-1.5 right-2 text-[9px] font-medium text-warning">
           Simulated
         </span>
-        <p className="pr-14 text-sm whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef]">
+        <p className="pr-14 text-sm whitespace-pre-wrap text-whatsapp-ink">
           {body}
         </p>
       </div>

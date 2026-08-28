@@ -70,6 +70,14 @@
   --info: #3f4e8c;
   --info-subtle: #e6e9f5;
 
+  /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
+     literals in the component. Not folded into --success-subtle: the point of
+     this bubble is that a merchant recognises the channel at a glance, and a
+     generic green loses the one cue that says "this went out on WhatsApp".
+     The dark values are WhatsApp's dark theme, not an algorithmic darkening. */
+  --whatsapp-bubble: #dcf8c6;
+  --whatsapp-ink: #111b21;
+
   --radius: 8px;
 
   /* --- shadcn contract -----------------------------------------------------
@@ -146,6 +154,9 @@
   --danger-subtle: #2b1614;
   --info: #8a97d8;
   --info-subtle: #191c2e;
+
+  --whatsapp-bubble: #1f3320;
+  --whatsapp-ink: #e9edef;
 }
 
 /* ===========================================================================
@@ -197,6 +208,10 @@
   --color-danger-subtle: var(--danger-subtle);
   --color-info: var(--info);
   --color-info-subtle: var(--info-subtle);
+
+  /* Channel chrome — bg-whatsapp-bubble, text-whatsapp-ink */
+  --color-whatsapp-bubble: var(--whatsapp-bubble);
+  --color-whatsapp-ink: var(--whatsapp-ink);
 
   /* shadcn contract */
   --color-background: var(--background);
