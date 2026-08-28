@@ -286,4 +286,29 @@
       transparent
     );
   }
+
+  /* A row that has just arrived over Realtime, fading back to the table
+     surface. Written as a keyframe on the design token rather than as a
+     JS-driven colour animation: Framer Motion interpolates resolved colours,
+     not `var(--…)`, so animating it in JS would mean hard-coding one hex for
+     light and another for dark and switching on the theme. The token already
+     knows which mode it is in. */
+  @keyframes row-flash {
+    from {
+      background-color: var(--warning-subtle);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .animate-row-flash {
+    animation: row-flash 1.5s ease-out 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-row-flash {
+      animation-duration: 0.01ms;
+    }
+  }
 }

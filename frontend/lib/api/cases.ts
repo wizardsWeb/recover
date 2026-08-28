@@ -148,6 +148,30 @@ export interface CaseFilters {
   offset?: number;
 }
 
+/**
+ * Browser-side re-reads, used by the Realtime islands.
+ *
+ * These duplicate `cases.server.ts` in shape but not in mechanism: that module
+ * reaches the session through `next/headers`, this one through the browser's
+ * Supabase session. A Realtime event tells us *that* something changed, never
+ * the joined shape the UI renders — the payload is a bare `recovery_cases` row
+ * with no customer attached — so the islands re-read through the API rather
+ * than trying to reconstruct a list row from the notification.
+ */
+export function fetchCases(filters: CaseFilters = {}): Promise<{ cases: CaseListItem[] }> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.playbook) params.set("playbook", filters.playbook);
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.offset) params.set("offset", String(filters.offset));
+  const query = params.toString();
+  return request<{ cases: CaseListItem[] }>(`/api/cases${query ? `?${query}` : ""}`);
+}
+
+export function fetchOverview(): Promise<Overview> {
+  return request<Overview>("/api/analytics/overview");
+}
+
 /** Take a case away from the agent. Runs in the browser — it is a user action. */
 export function overrideCase(
   id: string,

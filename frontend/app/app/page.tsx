@@ -2,15 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { DashboardLiveTicker } from "@/components/domain/DashboardLiveTicker";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { FirstTimeDashboard } from "@/components/empty-states/FirstTimeDashboard";
 import { PageHeader } from "@/components/shell/PageHeader";
-import {
-  AnimatedINR,
-  AnimatedNumber,
-  AnimatedPercent,
-} from "@/components/ui/AnimatedNumber";
-import { Card, CardContent } from "@/components/ui/card";
 import type { CaseListItem, Overview } from "@/lib/api/cases";
 import { getCases, getOverview } from "@/lib/api/cases.server";
 import { formatINR } from "@/lib/utils/format";
@@ -47,69 +42,12 @@ export default async function DashboardPage() {
     );
   }
 
-  // `kind` rather than a `format` callback: these tiles are rendered by a
-  // server component, and a function cannot cross the server/client boundary.
-  const kpis: Array<{
-    label: string;
-    value: number;
-    kind: "inr" | "count" | "percent";
-    className: string;
-    surface: string;
-  }> = [
-    {
-      label: "At Risk Today",
-      value: overview.amount_at_risk_today_cents,
-      kind: "inr",
-      className: "text-warning",
-      surface: "bg-warning-subtle",
-    },
-    {
-      label: "Recovered Today",
-      value: overview.amount_recovered_today_cents,
-      kind: "inr",
-      className: "text-success",
-      surface: "bg-success-subtle",
-    },
-    {
-      label: "Cases In Flight",
-      value: overview.cases_in_flight,
-      kind: "count",
-      className: "text-info",
-      surface: "bg-info-subtle",
-    },
-    {
-      label: "Recovery Rate",
-      value: overview.recovery_rate_today,
-      kind: "percent",
-      className: "text-brand",
-      surface: "bg-brand-subtle",
-    },
-  ];
-
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Live view of recovery activity" />
-
-      <div className="mt-6 grid grid-cols-4 gap-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label} className={`border-hairline ${kpi.surface}`}>
-            <CardContent className="py-4">
-              <div className="mb-1 text-xs text-ink-faint">{kpi.label}</div>
-              <div
-                className={`font-display text-3xl font-semibold tracking-tight ${kpi.className}`}
-              >
-                {kpi.kind === "inr" ? (
-                  <AnimatedINR value={kpi.value} />
-                ) : kpi.kind === "percent" ? (
-                  <AnimatedPercent value={kpi.value} />
-                ) : (
-                  <AnimatedNumber value={kpi.value} />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* The tiles are seeded with server-fetched numbers and then kept current
+          by Realtime, so the island owns the header too — the live dot
+          qualifies the "Dashboard" heading and its status lives in the client. */}
+      <DashboardLiveTicker initial={overview} />
 
       <div className="mt-8">
         <div className="mb-3 flex items-center justify-between">
