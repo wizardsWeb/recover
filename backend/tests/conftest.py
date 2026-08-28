@@ -30,6 +30,10 @@ os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
 os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("ENVIRONMENT", "test")
+# The poller loops forever against a live Supabase project. Every
+# `TestClient(app)` runs the lifespan, so leaving it on would start one per
+# test module. Its behaviour is covered by tests that drive it directly.
+os.environ.setdefault("NETWORK_POLLER_ENABLED", "false")
 os.environ.setdefault("VERSION", "0.1.0")
 
 from fastapi.testclient import TestClient  # noqa: E402
