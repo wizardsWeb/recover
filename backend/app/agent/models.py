@@ -53,6 +53,11 @@ class ActionType(StrEnum):
     SEND_EMAIL = "send_email"
     MANDATE_REREGISTER = "mandate_reregister"
     HUMAN_HANDOFF = "human_handoff"
+    # One decision that fans out into several sends — the B2B ladder. It is an
+    # action type of its own rather than the type of its first sub-action so the
+    # guardrail can gate the whole fan-out, and so the timeline shows one
+    # decision rather than pretending three unrelated ones happened.
+    GRADUATED_SEQUENCE = "graduated_sequence"
     NO_OP = "no_op"
 
 
