@@ -111,6 +111,20 @@ const ROOT_CAUSE_LABELS: Record<string, string> = {
   invoice_dispute: "Disputes the invoice",
   customer_churn_intent: "Intends to leave",
   technical_issue_unlogged: "Technical failure with no error logged",
+  // Added in Phase 12: the causal graphs name their causes more precisely than
+  // the prompt enum did, and `humanise` would render these as "Mandate revoked
+  // by customer" — grammatical, and not the sentence a merchant wants.
+  mandate_revoked_by_customer: "Customer cancelled the auto-pay mandate",
+  bank_transient_failure: "Bank declined it temporarily",
+  insufficient_credit_limit: "Card has no credit headroom left",
+  trust_issue_at_checkout: "Hesitated at the bank's security step",
+  technical_failure_unlogged: "Technical failure with no error logged",
+  payment_method_unavailable: "Preferred payment method unavailable",
+  upi_psp_timeout: "UPI provider timed out",
+  card_blocked: "Card blocked by the issuer",
+  invoice_dispute_likely: "Likely disputing the invoice",
+  cash_flow_stress_new: "New cash-flow trouble — has always paid before",
+  ap_process_delay: "Stuck in their accounts-payable queue",
   unknown: "Not established",
 };
 

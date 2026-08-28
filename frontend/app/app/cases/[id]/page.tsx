@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { CausalReasoningSection } from "@/components/domain/CausalReasoningSection";
 import { CaseTimeline } from "@/components/domain/CaseTimeline";
 import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
 import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
@@ -26,6 +27,13 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
 
   const customer = caseDetail.customers;
   const isOptedOut = Boolean(customer?.consent?.opted_out_at);
+  // Only for cases a causal graph actually reasoned about. Anything closed
+  // before Phase 12, or diagnosed by the model-led fallback, has no feature
+  // vector — and a graph with nothing lit up would imply the agent weighed
+  // these hypotheses when it did not.
+  const hasCausalGraph = Boolean(
+    (caseDetail.diagnosis as { dag_traversal_used?: boolean } | null)?.dag_traversal_used,
+  );
 
   return (
     <>
@@ -109,6 +117,10 @@ export default async function CaseDetailPage({ params }: PageProps<"/app/cases/[
           </Card>
         </div>
       </div>
+
+      {/* Full width, below the two-column layout rather than inside it: a
+          fifteen-node graph in a 700px column is a graph nobody can read. */}
+      {hasCausalGraph ? <CausalReasoningSection caseId={caseDetail.id} /> : null}
     </>
   );
 }
