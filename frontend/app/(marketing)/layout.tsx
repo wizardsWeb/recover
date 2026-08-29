@@ -1,62 +1,63 @@
-import { Wordmark } from "@/components/brand/Wordmark";
+import { LandingNav } from "@/components/marketing/LandingNav";
 import { IMAGE_CREDITS } from "@/lib/assets/images";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { ButtonLink } from "@/components/ui/button-link";
 
 export default function MarketingLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh flex-col">
-      {/* Dark and translucent in both colour modes, so it reads over the hero
-          video and over the light section below it without a scroll listener
-          deciding which. The same reasoning as the app's rail: chrome is dark,
-          content is not, and the boundary never has to be negotiated. */}
-      <header className="sticky top-0 z-40 bg-ink-900/80 backdrop-blur-md">
-        <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <Wordmark className="text-white" lineClassName="bg-sidebar-gold" />
-          <div className="flex items-center gap-1">
-            <ThemeToggle className="text-ink-200 hover:bg-white/10 hover:text-white dark:hover:bg-white/10" />
-            <ButtonLink
-              href="/login"
-              variant="ghost"
-              size="sm"
-              className="text-ink-200 hover:bg-white/10 hover:text-white dark:hover:bg-white/10"
-            >
-              Log in
-            </ButtonLink>
-            <ButtonLink href="/signup" size="sm">
-              Get started
-            </ButtonLink>
-          </div>
-        </nav>
-      </header>
+      {/*
+        Bubbledot, the hero's dot-matrix face, loaded here and only here.
+
+        The app layout never links it, so no dashboard route pays for a font it
+        does not draw with — the whole reason this is a `<link>` in one layout
+        rather than a `next/font` import in the root. `preconnect` is separate
+        from the stylesheet because the font *files* come from a different
+        origin than the CSS that names them, and without it the browser only
+        starts that second handshake after parsing the @font-face rule.
+
+        The licence (CC BY 4.0) requires credit, which the footer gives.
+      */}
+      <link rel="preconnect" href="https://db.onlinewebfonts.com" crossOrigin="anonymous" />
+      <link
+        rel="stylesheet"
+        href="https://db.onlinewebfonts.com/c/8cb707a9b8a73f8a7403336b861c3074?family=BubbledotICG-FinePos"
+      />
+
+      {/* Fixed rather than sticky, and outside `main`: it floats over the hero
+          video from the first frame instead of being a bar the page pushes
+          down. */}
+      <LandingNav />
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-hairline">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-ink-faint sm:flex-row sm:items-center sm:justify-between">
-          <p>Recover · Built for Razorpay Buildathon 2026</p>
+      <footer className="bg-ink-900">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-white/40 sm:flex-row sm:items-center sm:justify-between">
+          <p>Recover · Built for Razorpay Buildathon 2026 · wizardsWeb</p>
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <a
               href="https://github.com/wizardsWeb/razorpay_buildathon"
-              className="transition-colors duration-150 hover:text-ink-muted"
+              className="transition-colors duration-150 hover:text-white/70"
             >
               GitHub
             </a>
-            <span>by wizardsWeb</span>
             {/* Attribution is not required by the Pexels licence. It is here
                 because a product that quietly uses someone's work as set
-                dressing has decided credit is optional. */}
+                dressing has decided credit is optional. The font's licence,
+                unlike Pexels', does require it. */}
             <span className="text-[11px]">
               Imagery:{" "}
               {IMAGE_CREDITS.map((credit, index) => (
                 <span key={credit.name}>
                   {index > 0 && ", "}
-                  <a href={credit.url} className="hover:text-ink-muted">
+                  <a href={credit.url} className="hover:text-white/70">
                     {credit.name}
                   </a>
                 </span>
               ))}{" "}
-              on Pexels
+              on Pexels · Headline face from{" "}
+              <a href="https://www.onlinewebfonts.com/fonts" className="hover:text-white/70">
+                Web Fonts
+              </a>
+              , CC BY 4.0
             </span>
           </p>
         </div>

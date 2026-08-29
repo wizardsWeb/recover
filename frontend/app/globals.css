@@ -409,6 +409,20 @@
 }
 
 @layer components {
+  /* The landing page's display face, and nowhere else.
+     ---------------------------------------------------------------------
+     A retro dot-matrix, loaded from a third-party CDN by the marketing
+     layout alone — the app layout never links it, so no dashboard route
+     pays for a font it does not draw with. The class is declared here
+     rather than in the layout because a `style` attribute cannot carry the
+     fallback, and a headline that renders in Bubbledot on one connection
+     and in nothing at all on another is a headline that disappears.
+     Sora is the fallback: the same display voice at the same weight, so a
+     failed font request costs the texture and not the layout. */
+  .font-dotmatrix {
+    font-family: "BubbledotICG-FinePos", var(--font-display);
+  }
+
   /* The hairline that runs under the hero — the one place ornamental gold is
      allowed, and it carries no information. */
   .rule-gold {

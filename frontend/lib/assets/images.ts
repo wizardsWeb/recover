@@ -90,19 +90,21 @@ export const AUTH_PANEL_IMAGES: readonly StockImage[] = [
 /**
  * The landing hero's background loop.
  *
- * Eight seconds, which is short enough that the loop point is not a jump cut
- * and small enough not to dominate the page weight. The 1280px rendition rather
- * than the 1920px one: it sits behind a 75%-opacity scrim at any viewport size,
- * so the extra detail is spent on pixels nobody will ever resolve.
+ * Served from the brief's own CDN rather than from Pexels, and it is the one
+ * asset on the page with no poster frame. That is deliberate: the section's
+ * ground is already near-black, so the first paint before the video arrives is
+ * the same black the scrim would have put over a poster anyway. A still from a
+ * *different* shot would have been worse than nothing — the frame would swap
+ * for an unrelated one the moment the video started.
+ *
+ * It is 13.9MB, which is large for a hero. It sits behind a 70% scrim and is
+ * marked decorative, so nothing on the page waits on it and nothing in it needs
+ * to be read; the cost is bandwidth on a fast connection rather than a blocked
+ * first paint. Worth revisiting with a re-encode if the page ever ships to
+ * users on metered connections.
  */
 export const HERO_VIDEO = {
-  src: "https://videos.pexels.com/video-files/6577159/6577159-hd_1280_720_50fps.mp4",
-  /** Shown until the video can play, and instead of it on a slow connection. */
-  poster:
-    "https://images.pexels.com/videos/6577159/pexels-photo-6577159.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=900&w=1600",
-  photographer: "shalender kumar",
-  photographerUrl: "https://www.pexels.com/@shalenderkumar",
-  source: "https://www.pexels.com/video/6577159/",
+  src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4",
 } as const;
 
 /** Everything credited in the footer, de-duplicated by photographer. */
@@ -112,7 +114,6 @@ export const IMAGE_CREDITS: ReadonlyArray<{ name: string; url: string }> = [
       HERO_IMAGE,
       ...Object.values(SCENARIO_IMAGES),
       PAYMENT_FAILURE_IMAGE,
-      HERO_VIDEO,
     ].map((asset) => [asset.photographer, { name: asset.photographer, url: asset.photographerUrl }]),
   ).values(),
 ];
