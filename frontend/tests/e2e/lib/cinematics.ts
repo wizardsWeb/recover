@@ -63,6 +63,37 @@ const CURSOR_SCRIPT = `
 
   const state = { x: seeded.x, y: seeded.y, el: null, ring: null };
 
+  /**
+   * Whichever element actually scrolls on this page.
+   *
+   * The app shell is h-dvh with overflow-hidden and puts overflow-y-auto on the
+   * main column, so the window never scrolls inside /app at all — every
+   * window.scrollTo there is a silent no-op, which is why the first cut filmed
+   * only the top of every page. The marketing pages outside the shell do scroll
+   * the document, so this has to handle both.
+   */
+  function scroller() {
+    const main = document.querySelector('main');
+    if (main && main.scrollHeight > main.clientHeight + 4) return main;
+    const doc = document.scrollingElement || document.documentElement;
+    if (doc && doc.scrollHeight > doc.clientHeight + 4) return doc;
+    return main || doc;
+  }
+
+  function scrollTopOf(el) {
+    return el === document.scrollingElement || el === document.documentElement
+      ? window.scrollY
+      : el.scrollTop;
+  }
+
+  function setScrollTop(el, value) {
+    if (el === document.scrollingElement || el === document.documentElement) {
+      window.scrollTo(0, value);
+    } else {
+      el.scrollTop = value;
+    }
+  }
+
   function build() {
     if (state.el && document.body.contains(state.el)) return;
     if (!document.body) return;
@@ -172,8 +203,10 @@ const CURSOR_SCRIPT = `
      * skipped altogether under prefers-reduced-motion.
      */
     scrollTo(targetY, ms) {
-      const sy = window.scrollY;
-      const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const el = scroller();
+      if (!el) return Promise.resolve();
+      const sy = scrollTopOf(el);
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
       const dy = Math.max(0, Math.min(targetY, max)) - sy;
       if (Math.abs(dy) < 2) return Promise.resolve();
       const start = performance.now();
@@ -181,12 +214,35 @@ const CURSOR_SCRIPT = `
       return new Promise((resolve) => {
         function frame(now) {
           const t = Math.min((now - start) / Math.max(ms, 160), 1);
-          window.scrollTo(0, sy + dy * easeOutCubic(t));
+          setScrollTop(el, sy + dy * easeOutCubic(t));
           if (t < 1) requestAnimationFrame(frame);
           else resolve();
         }
         requestAnimationFrame(frame);
       });
+    },
+
+    /** How far the scrolling element can travel, and where it is now. */
+    range() {
+      const el = scroller();
+      if (!el) return { max: 0, at: 0, viewport: window.innerHeight };
+      return {
+        max: Math.max(0, el.scrollHeight - el.clientHeight),
+        at: scrollTopOf(el),
+        viewport: el.clientHeight || window.innerHeight,
+      };
+    },
+
+    /** Scroll so a given element sits a third of the way down the frame. */
+    reveal(el, ms) {
+      const sc = scroller();
+      if (!sc || !el) return Promise.resolve();
+      const rect = el.getBoundingClientRect();
+      const base = sc === document.scrollingElement || sc === document.documentElement
+        ? rect.top + window.scrollY
+        : sc.scrollTop + (rect.top - sc.getBoundingClientRect().top);
+      const target = base - (sc.clientHeight || window.innerHeight) / 3;
+      return window.__demo.scrollTo(target, ms);
     },
   };
 
@@ -207,6 +263,8 @@ interface DemoWindow {
     move: (x: number, y: number, ms: number) => Promise<void>;
     press: () => Promise<void>;
     scrollTo: (y: number, ms: number) => Promise<void>;
+    range: () => { max: number; at: number; viewport: number };
+    reveal: (el: Element, ms: number) => Promise<void>;
   };
 }
 
@@ -291,13 +349,42 @@ export async function type(page: Page, locator: Locator, text: string, delay = 5
   await page.waitForTimeout(220);
 }
 
-/** Eased scroll by a delta, in pixels. */
+/** Eased scroll by a delta, in pixels, on whichever element actually scrolls. */
 export async function scrollBy(page: Page, dy: number, ms = 900): Promise<void> {
   await page
     .evaluate(
-      ([delta, dur]) =>
-        (window as DemoWindow).__demo?.scrollTo(window.scrollY + delta, dur),
+      ([delta, dur]) => {
+        const demo = (window as DemoWindow).__demo;
+        if (!demo) return undefined;
+        return demo.scrollTo(demo.range().at + delta, dur);
+      },
       [dy, ms] as const,
+    )
+    .catch(() => {});
+}
+
+/** How far the scrolling element can travel, and where it currently is. */
+export async function scrollRange(
+  page: Page,
+): Promise<{ max: number; at: number; viewport: number }> {
+  return page
+    .evaluate(
+      () =>
+        (window as DemoWindow).__demo?.range() ?? {
+          max: 0,
+          at: 0,
+          viewport: window.innerHeight,
+        },
+    )
+    .catch(() => ({ max: 0, at: 0, viewport: 900 }));
+}
+
+/** Eased scroll to an absolute offset on the scrolling element. */
+export async function scrollToOffset(page: Page, y: number, ms = 900): Promise<void> {
+  await page
+    .evaluate(
+      ([target, dur]) => (window as DemoWindow).__demo?.scrollTo(target, dur),
+      [y, ms] as const,
     )
     .catch(() => {});
 }
@@ -305,11 +392,10 @@ export async function scrollBy(page: Page, dy: number, ms = 900): Promise<void> 
 /**
  * Eased scroll until a locator sits comfortably in frame.
  *
- * Aims a third of the way down the viewport rather than the top edge, which is
+ * Aims a third of the way down the frame rather than the top edge, which is
  * where the eye expects the thing being talked about to be. The arithmetic runs
- * inside the page against `getBoundingClientRect`, because that is already
- * viewport-relative — mixing it with Playwright's `boundingBox` and a separately
- * fetched `scrollY` is how an off-by-one-scroll-offset creeps in.
+ * inside the page, against the element that actually scrolls — which inside the
+ * app shell is the main column and not the window.
  */
 export async function scrollToLocator(page: Page, locator: Locator, ms = 900): Promise<boolean> {
   try {
@@ -317,9 +403,7 @@ export async function scrollToLocator(page: Page, locator: Locator, ms = 900): P
     return await locator.evaluate(async (el, duration) => {
       const demo = (window as DemoWindow).__demo;
       if (!demo) return false;
-      const rect = el.getBoundingClientRect();
-      const target = window.scrollY + rect.top - window.innerHeight / 3;
-      await demo.scrollTo(target, duration);
+      await demo.reveal(el, duration);
       return true;
     }, ms);
   } catch {

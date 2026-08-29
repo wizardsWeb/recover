@@ -1,463 +1,341 @@
 /**
  * The demo recording.
  *
- * One test, run start to finish, producing a single .webm. Segment numbers here
- * match `docs/voiceover-script.md` exactly — segment 7 in this file is segment 7
- * in that file, and the `beat()` durations are the seconds the narration for
- * that segment has to fill. Change a duration here and change it there.
+ * One test, start to finish, producing a single video. Segment numbers here
+ * match `docs/voiceover-script.md` exactly.
  *
- * **No `page.pause()`.** It is a debugging tool: it opens the Playwright
- * Inspector and blocks until a human clicks resume, which in a recording means a
- * frozen video with a devtools window in it. Pacing comes from `beat()`.
+ * **Everything is clicked, nothing is typed into the address bar.** An earlier
+ * cut navigated with `page.goto`, which on video is a page changing for no
+ * visible reason. Pages are reached through the left rail and cases through the
+ * customer's name in the table, so every transition has a cause on screen.
  *
- * **Where the data comes from.** `backend/scripts/demo_state.json`, written by
- * `backend/scripts/prepare_demo.py`. Case ids are read from it rather than
- * hardcoded, because re-running the seeder issues new ones.
+ * **Every page is scrolled to the bottom.** All of them have content below the
+ * fold — the funnel under the dashboard tiles, the compliance summary under the
+ * batch chart, the network insights under the heatmap — and the first cut filmed
+ * only the top 900 pixels of each.
  *
- * **What this asserts.** Only that the page it is about to film actually
- * rendered. It is not a test of the product; a failed assertion here means the
- * narration would be talking over an empty div, which is worth stopping for.
- * Bandit arms are deliberately not asserted — the arm is a Thompson draw and
- * varies per seeding run, so `demo_state.json` records what was actually chosen.
+ * **Beats wait for content, not for a timer.** `ready()` waits for the heading
+ * and for any chart to have a measured width. The batch page fetches on the
+ * server and then lets Recharts size itself — it logs `width(-1) and height(-1)`
+ * on its first pass — so a fixed delay opened the beat on a blank panel, which
+ * is exactly the frame that went wrong last time.
  *
- * Run it:
+ * **No `page.pause()`.** It opens the Playwright Inspector and blocks until a
+ * human clicks resume: a frozen video with a devtools window in it.
+ *
+ * Data comes from `backend/scripts/demo_state.json`. Case ids are only read to
+ * know which customer to look for; the opening itself is a click.
  *
  *     cd frontend
- *     npx playwright test --project=demo
- *
- * Against a local stack instead of the deployment (see the batch segment for why
- * you might want to):
- *
- *     DEMO_BASE_URL=http://localhost:3000 npx playwright test --project=demo
- *
- * The video lands in `tests/e2e/recordings/` as a .webm. Convert for editing:
- *
- *     ffmpeg -i recording.webm -c:v libx264 -crf 18 -pix_fmt yuv420p recording.mp4
+ *     npm run demo:record     # Playwright's own 25fps capture
+ *     npm run demo:capture    # 60fps screen capture, needs one permission
  */
 
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-import {
-  click,
-  installCursor,
-  moveTo,
-  scrollBy,
-  scrollToLocator,
-  settleCursor,
-  type as typeInto,
-} from "./lib/cinematics";
+import { click, installCursor, moveTo, type as typeInto } from "./lib/cinematics";
+import { expandStep, hover, navByRail, openCaseByName, ready, rest, tourPage } from "./lib/tour";
 
 interface DemoCase {
   case_id: string;
   merchant: string;
   customer_name: string;
-  expected_arm: string;
-  expected_status: string;
   actual_arm: string;
   actual_status: string;
 }
 
 interface DemoState {
-  base_url: string;
   accounts: Record<
     string,
     { email: string; password: string; merchant_id: string; brand_name: string }
   >;
   cases: Record<string, DemoCase>;
-  batch_id: string;
-  network_alert_id: string;
   generated_at: string;
 }
 
 const state: DemoState = JSON.parse(
-  fs.readFileSync(
-    path.resolve(__dirname, "../../../backend/scripts/demo_state.json"),
-    "utf8",
-  ),
+  fs.readFileSync(path.resolve(__dirname, "../../../backend/scripts/demo_state.json"), "utf8"),
 );
 
-/** Wall clock at the first beat, which is roughly when the video starts. */
 let startedAt = 0;
-
-/** One row per beat: where it actually landed in the video, and how long it held. */
 const timeline: { at: number; hold: number; label: string }[] = [];
-
-const mmss = (s: number) =>
-  `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 /**
- * Hold still for `seconds` so the narration for this beat has room.
+ * Hold still so the narration for this beat has room.
  *
- * The offset logged here is **real elapsed time**, not the sum of the holds
- * before it. Those two numbers are not the same and the difference is not small:
- * every navigation in between costs seconds the holds never accounted for, and
- * against a deployment a region away that adds up to a minute or more across the
- * run. A voiceover timed against the sum would drift steadily out of sync with
- * the video it is supposed to match.
- *
- * So this prints what the video will actually show, and the table at the end is
- * the thing to time the narration against. Re-run after any edit and re-read it;
- * the offsets move whenever the network does.
+ * The offset logged is real elapsed time, not the sum of the holds before it.
+ * Navigation, typing and scrolling all cost seconds the holds never account for,
+ * so a voiceover timed against the sum drifts steadily out from under the
+ * picture. The table printed at the end is the thing to time against.
  */
 async function beat(page: Page, seconds: number, label: string): Promise<void> {
   if (!startedAt) startedAt = Date.now();
   const at = (Date.now() - startedAt) / 1000;
   timeline.push({ at, hold: seconds, label });
-  console.log(`  ${mmss(at)}  (${seconds}s hold)  ${label}`);
+  console.log(`  ${mmss(at)}  (${seconds}s)  ${label}`);
   await page.waitForTimeout(seconds * 1000);
 }
 
-/**
- * Sign in as one of the demo merchants.
- *
- * The wait before filling matters. The form's only submit handler is React's,
- * so a click that lands before hydration falls through to the browser's native
- * submission — a GET carrying the password in the query string, which would then
- * be on camera in the URL bar. The app now disables the button until hydration,
- * but this recording may run against a build that predates that, so the wait
- * stays here too.
- */
-async function signIn(page: Page, slug: keyof DemoState["accounts"]): Promise<void> {
-  const account = state.accounts[slug as string];
-  await go(page, "/login", 1200);
-
-  // Typed rather than filled. `fill()` sets the value in one assignment, which
-  // on video looks like the text was pasted by a machine — which it was.
-  await typeInto(page, page.getByLabel("Email"), account.email, 42);
-  await typeInto(page, page.getByLabel("Password"), account.password, 42);
-  await click(page, page.getByRole("button", { name: /sign in/i }));
-  await page.waitForURL((url) => url.pathname.startsWith("/app"), { timeout: 90_000 });
-  await page.waitForTimeout(900);
-  await settleCursor(page);
-}
-
-/** Sign out through the header menu, so the video shows the tenant changing. */
-async function signOut(page: Page): Promise<void> {
-  await click(page, page.getByLabel("Account menu"));
-  await page.waitForTimeout(700);
-  await click(page, page.getByRole("menuitem", { name: /sign out/i }), 380);
-  await page.waitForURL((url) => !url.pathname.startsWith("/app"), { timeout: 60_000 });
-  await page.waitForTimeout(600);
-  await settleCursor(page);
-}
-
-/**
- * Navigate, then settle briefly.
- *
- * `networkidle` waits for the network to go quiet for half a second, and this
- * app never quite does — the alert banner holds a WebSocket open, and Realtime
- * subscribes on the case pages. Waiting for it added two to four seconds to
- * every one of twenty-odd navigations, which is most of the gap between the
- * beats this file schedules and the length of the video it produces.
- */
-async function go(page: Page, url: string, settleMs = 700): Promise<void> {
+/** Navigate by URL. Only used to enter the app from outside it. */
+async function go(page: Page, url: string, settleMs = 900): Promise<void> {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(settleMs);
-  // A full document load drops the injected cursor, so put it back where it was
-  // rather than letting it reappear in the corner between segments.
-  await settleCursor(page);
+  await ready(page);
 }
 
-
-/** Open a case detail page by its key in `demo_state.json`. */
-async function openCase(page: Page, key: string): Promise<DemoCase> {
-  const demoCase = state.cases[key];
-  if (!demoCase) throw new Error(`No case ${key} in demo_state.json`);
-  await go(page, `/app/cases/${demoCase.case_id}`, 1100);
-  await expect(page.getByRole("heading", { name: /^Case /i })).toBeVisible();
-  return demoCase;
+async function signIn(page: Page, slug: string): Promise<void> {
+  const account = state.accounts[slug];
+  // Typed, not filled: `fill()` assigns the value in one go, which on video is
+  // text appearing by magic.
+  await typeInto(page, page.getByLabel("Email"), account.email, 40);
+  await typeInto(page, page.getByLabel("Password"), account.password, 40);
+  await click(page, page.getByRole("button", { name: /sign in/i }));
+  await page.waitForURL((url) => url.pathname.startsWith("/app"), { timeout: 90_000 });
+  await ready(page);
 }
 
-/**
- * Expand one step in the agent timeline.
- *
- * The steps render as buttons labelled with the step name and its timestamp, so
- * a name match has to be a prefix rather than an exact string.
- */
-async function expandStep(page: Page, step: string): Promise<void> {
-  const trigger = page.getByRole("button", { name: new RegExp(`^${step}`, "i") }).first();
-  await scrollToLocator(page, trigger, 700);
-  await click(page, trigger);
-  // Long enough for the panel's own open animation to finish before the beat
-  // that talks about what is inside it.
-  await page.waitForTimeout(850);
+/** Sign out through the header menu, then land back on the login form. */
+async function signOut(page: Page): Promise<void> {
+  await click(page, page.getByLabel("Account menu"));
+  await page.waitForTimeout(650);
+  await click(page, page.getByRole("menuitem", { name: /sign out/i }), 360);
+  await page.waitForURL((url) => !url.pathname.startsWith("/app"), { timeout: 60_000 });
+  await page.waitForTimeout(700);
+  await go(page, "/login", 900);
 }
 
 /**
- * Scroll to something as an eased animation, and carry on if it is not there.
+ * Put the network back to healthy.
  *
- * The short timeout inside `scrollToLocator` is the point: Playwright's default
- * action timeout is 30 seconds, so a selector that never matches does not just
- * fail — it silently adds half a minute of dead video between two beats, and the
- * narration timed against them slides out from under the picture.
+ * The downtime button in segment 15 writes a real alert, and the endpoint's own
+ * auto-resolve is thirty minutes out. Left alone, the next run would open on a
+ * live outage — and then hit the endpoint's duplicate check when it tried to
+ * fire another one.
  */
-async function glideTo(page: Page, selector: string): Promise<void> {
-  const found = await scrollToLocator(page, page.locator(selector).first(), 950);
-  if (!found) console.log(`      (nothing matched ${selector} — skipped the scroll)`);
-  await page.waitForTimeout(350);
-}
-
-/**
- * Put a live outage on the network page, for real, mid-recording.
- *
- * `/api/simulator/network/downtime` is the obvious way to do this and it returns
- * 404 in production: the simulator router is gated to development environments
- * because it manufactures financial events. So the row goes in directly, with
- * the service role, in the shape that endpoint writes — and the banner picks it
- * up on the next load of the page, because `NetworkAlertBanner` re-reads
- * `/api/network/alerts` rather than trusting a socket payload.
- *
- * Resolved again immediately afterwards, so the app is not left showing an
- * outage that never ends.
- */
-async function writeNetworkAlert(live: boolean): Promise<void> {
+async function resolveAlerts(): Promise<void> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!url || !key) {
-    console.log("  ! SUPABASE_URL / SUPABASE_SERVICE_KEY unset — skipping the live alert");
+    console.log("  ! SUPABASE_* unset — any outage will be left standing");
     return;
   }
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-    Prefer: "return=minimal",
-  };
   const now = new Date().toISOString();
-
-  if (live) {
-    await fetch(`${url}/rest/v1/network_alerts`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        alert_type: "downtime",
-        affected_bank: "SBI",
-        affected_method: "upi",
-        severity: "high",
-        sample_size: 240,
-        affected_merchants_count: 3,
-        network_wide_success_rate: 0.31,
-        baseline_rate: 0.82,
-        detected_at: now,
-        resolved_at: null,
-        metadata: { source: "demo_recording", duration_minutes: 30 },
-      }),
-    });
-    return;
-  }
-
   await fetch(`${url}/rest/v1/network_alerts?resolved_at=is.null`, {
     method: "PATCH",
-    headers,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
     body: JSON.stringify({ resolved_at: now, updated_at: now }),
-  });
+  }).catch(() => {});
 }
 
 test("demo recording", async ({ page }) => {
   console.log(`\nRecording against ${test.info().project.use.baseURL}`);
   console.log(`Seeded ${state.generated_at}\n`);
 
-  // ── SEGMENT 1 · the landing page ───────────────────────────────────
+  await resolveAlerts();
   await installCursor(page);
-  await go(page, "/", 1200);
 
-  // Where the page content actually sits on the physical screen, so an external
-  // capture can be cropped to exactly the viewport with no chrome and no
-  // guesswork about the height of the tab strip. `devicePixelRatio` matters:
-  // screen capture works in physical pixels, CSS coordinates do not.
-  const rect = await page.evaluate(() => ({
-    x: window.screenX,
-    y: window.screenY + (window.outerHeight - window.innerHeight),
-    width: window.innerWidth,
-    height: window.innerHeight,
-    dpr: window.devicePixelRatio,
-  }));
-  const rectFile = path.resolve(__dirname, "recordings/viewport.json");
-  fs.mkdirSync(path.dirname(rectFile), { recursive: true });
-  fs.writeFileSync(rectFile, `${JSON.stringify(rect, null, 2)}\n`);
-  console.log(
-    `  viewport on screen: ${rect.width}x${rect.height} at ${rect.x},${rect.y} (dpr ${rect.dpr})\n`,
-  );
-  // Drift in from off-centre so the first thing the viewer sees is a pointer
-  // that was already there, rather than one that pops into existence.
-  await moveTo(page, 660, 400, 900);
-  await beat(page, 4, "S1 · landing hero");
-  await scrollBy(page, 520, 1500);
-  await beat(page, 4, "S1 · scroll into the pitch");
-  await scrollBy(page, 620, 1500);
-  await beat(page, 4, "S1 · how it works");
+  // ── SEGMENT 1 · the landing page ───────────────────────────────────
+  await go(page, "/", 1300);
+  await moveTo(page, 680, 400, 900);
+  await beat(page, 5, "S1 · landing hero");
+  await tourPage(page, { seconds: 13, label: "S1 landing" });
+  await beat(page, 3, "S1 · the pitch, end to end");
 
   // ── SEGMENT 2 · sign-up exists, then sign in ───────────────────────
-  await go(page, "/signup");
-  await expect(page.getByRole("button", { name: /create account/i })).toBeVisible();
-  await beat(page, 4, "S2 · sign-up form");
+  await click(page, page.getByRole("link", { name: /sign up/i }).first());
+  await page.waitForURL(/\/signup/, { timeout: 45_000 });
+  await ready(page);
+  await beat(page, 5, "S2 · the sign-up form");
 
+  await click(page, page.getByRole("link", { name: /sign in/i }).first());
+  await page.waitForURL(/\/login/, { timeout: 45_000 });
+  await ready(page);
   await signIn(page, "zenith");
-  await beat(page, 3, "S2 · signed in as Zenith Learning");
+  await beat(page, 4, "S2 · Zenith Learning, signed in");
 
-  // ── SEGMENT 3 · the dashboard ──────────────────────────────────────
+  // ── SEGMENT 3 · the dashboard, all of it ───────────────────────────
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   await beat(page, 5, "S3 · dashboard KPIs");
-  await glideTo(page, "text=Recovery funnel");
-  await beat(page, 6, "S3 · recovery funnel");
-  await glideTo(page, "text=Recent cases");
-  await beat(page, 4, "S3 · recent cases");
+  await tourPage(page, { seconds: 15, label: "S3 dashboard" });
+  await beat(page, 4, "S3 · the funnel, and recent cases");
 
-  // ── SEGMENT 4 · S1 Suresh — causal diagnosis ───────────────────────
-  const suresh = await openCase(page, "S1_suresh");
-  await beat(page, 5, `S4 · ${suresh.customer_name} — case header`);
+  // ── SEGMENT 4 · the cases list, then Suresh ────────────────────────
+  await navByRail(page, "Cases", "/app/cases");
+  await beat(page, 5, "S4 · every case, with its uplift bucket");
+  await tourPage(page, { seconds: 8, label: "S4 cases", maxPx: 1700 });
+
+  await openCaseByName(page, state.cases.S1_suresh.customer_name);
+  await beat(page, 5, "S4 · Suresh Iyer — a subscription renewal that failed");
+  await tourPage(page, { seconds: 8, label: "S4 case detail" });
   await expandStep(page, "diagnose");
-  await beat(page, 8, "S4 · causal DAG + root cause");
-  await glideTo(page, "text=Causal Reasoning");
-  await beat(page, 7, "S4 · causal reasoning panel");
-  await glideTo(page, "text=What else it could be");
-  await beat(page, 5, "S4 · competing hypotheses");
-
-  // ── SEGMENT 5 · the bandit ─────────────────────────────────────────
-  await expandStep(page, "decide");
-  await beat(page, 8, "S5 · Thompson sampling, arm chosen + alternatives fan");
+  await beat(page, 9, "S4 · the causal diagnosis, and the root cause");
   await expandStep(page, "uplift check");
-  await beat(page, 6, "S5 · uplift bucket");
+  await beat(page, 6, "S4 · would contacting him even help");
+
+  // ── SEGMENT 5 · the bandit and the guardrail ───────────────────────
+  await expandStep(page, "decide");
+  await beat(page, 9, "S5 · Thompson sampling, and the arms it passed over");
   await expandStep(page, "guardrail");
-  await beat(page, 6, "S5 · RBI / TRAI / consent guardrail");
+  await beat(page, 7, "S5 · RBI, TRAI, consent");
+  await expandStep(page, "execute");
+  await beat(page, 6, "S5 · the retry, and what came back");
 
-  // ── SEGMENT 6 · S5 Vikram — reply, handoff, real payment link ──────
-  const vikram = await openCase(page, "S5_vikram");
-  await beat(page, 5, `S6 · ${vikram.customer_name} — churn intent`);
+  // ── SEGMENT 6 · Vikram — churn, handoff, a real link ───────────────
+  await navByRail(page, "Cases", "/app/cases");
+  await openCaseByName(page, state.cases.S5_vikram.customer_name);
+  await beat(page, 4, "S6 · Vikram Sethi");
   await expandStep(page, "listen");
-  await beat(page, 8, "S6 · Hinglish reply classified as churn");
+  await beat(page, 9, "S6 · a Hinglish reply, read as churn");
   await expandStep(page, "execute");
-  await beat(page, 7, "S6 · real Razorpay payment link");
-  // HumanHandoffCard renders inside the expanded execute step (CaseTimeline
-  // ~line 731), keyed off the handoff execution attempt — not as a panel of its
-  // own further down the page.
-  await beat(page, 6, "S6 · human handoff card");
+  await beat(page, 9, "S6 · a real Razorpay link, then a human handoff");
+  await tourPage(page, { seconds: 7, label: "S6 case detail" });
 
-  // ── SEGMENT 7 · tenant switch ──────────────────────────────────────
+  // ── SEGMENT 7 · playbooks ──────────────────────────────────────────
+  await navByRail(page, "Playbooks", "/app/playbooks");
+  await beat(page, 5, "S7 · four playbooks");
+  await tourPage(page, { seconds: 7, label: "S7 playbooks" });
+  await click(page, page.getByRole("link", { name: /configure/i }).nth(1));
+  await page.waitForURL(/\/app\/playbooks\/.+/, { timeout: 45_000 });
+  await ready(page);
+  await beat(page, 6, "S7 · inside one playbook — arms and limits");
+  await tourPage(page, { seconds: 9, label: "S7 playbook detail" });
+
+  // ── SEGMENT 8 · tenant switch ──────────────────────────────────────
   await signOut(page);
-  await beat(page, 3, "S7 · signed out");
+  await beat(page, 3, "S8 · signed out");
   await signIn(page, "kajal");
-  await beat(page, 4, "S7 · signed in as Kajal & Co. — different tenant, different data");
+  await beat(page, 5, "S8 · Kajal & Co. — a different tenant entirely");
 
-  // ── SEGMENT 8 · cases list ─────────────────────────────────────────
-  await go(page, "/app/cases");
-  await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible();
-  await beat(page, 6, "S8 · cases list, uplift bucket column");
-
-  // ── SEGMENT 9 · S2 Priya — generated message ───────────────────────
-  const priya = await openCase(page, "S2_priya");
-  await beat(page, 4, `S9 · ${priya.customer_name} — cart abandonment`);
+  // ── SEGMENT 9 · Priya — the generated message ──────────────────────
+  await navByRail(page, "Cases", "/app/cases");
+  await beat(page, 4, "S9 · Kajal's cases");
+  await tourPage(page, { seconds: 6, label: "S9 cases", maxPx: 1300 });
+  await openCaseByName(page, state.cases.S2_priya.customer_name);
+  await beat(page, 4, "S9 · Priya Menon — a cart abandoned at checkout");
   await expandStep(page, "execute");
-  await beat(page, 9, "S9 · Gemini-written Hinglish WhatsApp message");
+  await beat(page, 10, "S9 · the Hinglish message Gemini wrote");
   await expandStep(page, "decide");
-  await beat(page, 6, "S9 · why this arm and not a discount");
+  await beat(page, 6, "S9 · why the eight per cent arm, and not a bigger one");
 
-  // ── SEGMENT 10 · S3 Aditya — the silent retry ──────────────────────
-  const aditya = await openCase(page, "S3_aditya");
-  await beat(page, 5, `S10 · ${aditya.customer_name} — recovered silently`);
-  await expandStep(page, "uplift check");
-  await beat(page, 8, "S10 · transient issuer failure — a retry fixes it, no message needed");
+  // ── SEGMENT 10 · Aditya — the silent recovery ──────────────────────
+  await navByRail(page, "Cases", "/app/cases");
+  await openCaseByName(page, state.cases.S3_aditya.customer_name);
+  await beat(page, 4, "S10 · Aditya Rao — recovered, silently");
+  await expandStep(page, "diagnose");
+  await beat(page, 7, "S10 · a transient issuer failure");
+  await expandStep(page, "execute");
+  await beat(page, 6, "S10 · a retry, and no message at all");
 
-  // ── SEGMENT 11 · S6 Sana — consent ─────────────────────────────────
-  const sana = await openCase(page, "S6_sana");
-  await beat(page, 4, `S11 · ${sana.customer_name} — opted out`);
-  // No step expansion: this case has zero agent_decisions rows. It stopped at
-  // the consent gate before a single step ran, which is the whole point of the
-  // beat — there is no decision to show because none was made.
-  await beat(page, 8, "S11 · do-not-disturb honoured, nothing was ever sent");
+  // ── SEGMENT 11 · Sana — consent ────────────────────────────────────
+  await navByRail(page, "Cases", "/app/cases");
+  await openCaseByName(page, state.cases.S6_sana.customer_name);
+  await beat(page, 5, "S11 · Sana Khatri — do not disturb");
+  await tourPage(page, { seconds: 9, label: "S11 case detail" });
+  await beat(page, 4, "S11 · no steps at all, because nothing was allowed to start");
 
-  // ── SEGMENT 12 · playbooks ─────────────────────────────────────────
-  await go(page, "/app/playbooks");
-  await expect(page.getByRole("heading", { name: "Playbooks", exact: true })).toBeVisible();
-  await beat(page, 4, "S12 · four playbooks");
-  await go(page, "/app/playbooks/checkout_abandonment");
-  await beat(page, 6, "S12 · playbook detail — arms and limits");
-
-  // ── SEGMENT 13 · B1 the learning curve ─────────────────────────────
-  await go(page, "/app/batch");
+  // ── SEGMENT 12 · the learning curve ────────────────────────────────
+  await navByRail(page, "Batch", "/app/batch");
   const emptyBatch = await page
     .getByText("No batch run yet")
     .isVisible()
     .catch(() => false);
   if (emptyBatch) {
-    // The page reads /api/simulator/batch/latest, which 404s wherever the
-    // backend's ENVIRONMENT is "production". Not fatal for the recording, but
-    // the narration for this segment has nothing to describe — so say so loudly
-    // rather than filming an empty state.
     console.log(
-      "  ! /app/batch is empty: the batch endpoint is gated off in production.\n" +
-        "    Set the backend Container App's ENVIRONMENT to 'staging' and re-run,\n" +
-        "    or record with DEMO_BASE_URL=http://localhost:3000.",
+      "  ! /app/batch is empty. That endpoint is gated off wherever the backend's\n" +
+        "    ENVIRONMENT is 'production' — record against a local stack.",
     );
   }
-  await beat(page, 6, "S13 · batch — bandit against a fixed rule");
-  await glideTo(page, "canvas, svg");
-  await beat(page, 9, "S13 · learning curve, bandit overtakes baseline");
+  await beat(page, 7, "S12 · a bandit against a fixed rule, over 200 cases");
+  await hover(page, page.locator("main svg").first());
+  await beat(page, 8, "S12 · the crossover at case fifty");
+  await tourPage(page, { seconds: 10, label: "S12 batch" });
+  await beat(page, 5, "S12 · compliance across the whole run");
 
-  // ── SEGMENT 14 · B2 uplift ROI ─────────────────────────────────────
-  await go(page, "/app/roi");
-  await expect(page.getByRole("heading", { name: "ROI", exact: true })).toBeVisible();
-  await beat(page, 7, "S14 · gross recovered versus incremental");
-  await glideTo(page, "text=Where the lift came from");
-  await beat(page, 9, "S14 · uplift buckets — persuadable, sure thing, lost cause, DND");
+  // ── SEGMENT 13 · uplift ROI ────────────────────────────────────────
+  await navByRail(page, "ROI", "/app/roi");
+  await beat(page, 7, "S13 · gross against incremental");
+  await tourPage(page, { seconds: 12, label: "S13 roi" });
+  await beat(page, 6, "S13 · the four uplift buckets");
 
-  // ── SEGMENT 15 · B3 the network, live ──────────────────────────────
-  await go(page, "/app/network");
-  await expect(page.getByRole("heading", { name: "Network", exact: true })).toBeVisible();
-  await beat(page, 6, "S15 · federated success rates across merchants");
-  await glideTo(page, "text=Success rate by bank and hour");
-  await beat(page, 6, "S15 · bank × hour heatmap");
+  // ── SEGMENT 14 · the audit trail ───────────────────────────────────
+  await navByRail(page, "Audit", "/app/audit");
+  await beat(page, 6, "S14 · every decision, every actor, every case");
+  await tourPage(page, { seconds: 9, label: "S14 audit" });
+  await beat(page, 4, "S14 · a log of reasoning, not of messages");
 
-  await writeNetworkAlert(true);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1200);
-  await beat(page, 9, "S15 · SBI UPI outage detected network-wide, retries held back");
-  await writeNetworkAlert(false);
+  // ── SEGMENT 15 · the network, and a live outage ─────────────────────
+  await navByRail(page, "Network", "/app/network");
+  await beat(page, 6, "S15 · success rates, pooled across merchants");
+  await tourPage(page, { seconds: 12, label: "S15 network" });
+  await beat(page, 5, "S15 · the bank-by-hour heatmap");
 
-  // ── SEGMENT 16 · Sharma — B2B promise to pay ───────────────────────
-  await signOut(page);
-  await signIn(page, "sharma");
-  await beat(page, 4, "S16 · signed in as Sharma Distributors");
-  const meera = await openCase(page, "S4_meera");
-  await beat(page, 5, `S16 · ${meera.customer_name} — overdue invoice`);
-  await expandStep(page, "execute");
-  await beat(page, 8, "S16 · graduated B2B sequence, two attempts");
-  // PromiseToPayCard renders inside `listen`, not `execute` — it hangs off the
-  // classified reply. Expanding the wrong step is how this segment ended up
-  // filming a card that was never on screen.
-  await expandStep(page, "listen");
-  await beat(page, 8, "S16 · promise-to-pay tracked, not chased — 50% now, rest by the 25th");
+  // The real control, clicked on camera. `/api/simulator/*` is gated to
+  // development environments, which is where this is recorded — and why the
+  // button is on screen at all.
+  const downtime = page.getByRole("button", { name: /SBI UPI downtime/i });
+  if (await downtime.isVisible().catch(() => false)) {
+    await click(page, downtime);
+    await page.waitForTimeout(2600);
+    // The banner is at the top of the page; the button is at the bottom.
+    await page.evaluate(
+      () =>
+        (window as unknown as { __demo?: { scrollTo: (y: number, ms: number) => Promise<void> } })
+          .__demo?.scrollTo(0, 1100),
+    );
+    await beat(page, 11, "S15 · SBI UPI drops, and every agent stops retrying into it");
+  } else {
+    console.log("      ! no downtime control on this build (isLocal is false)");
+    await beat(page, 11, "S15 · outage — control unavailable on this build");
+  }
 
-  // ── SEGMENT 17 · the audit trail ───────────────────────────────────
-  await go(page, "/app/audit");
-  await expect(page.getByRole("heading", { name: /audit log/i })).toBeVisible();
-  await beat(page, 8, "S17 · every decision, every actor, every case");
-  await go(page, "/app/settings");
-  await beat(page, 3, "S17 · settings");
-  // Only Profile and Test mode are live tabs. Playbooks, Compliance and Team are
-  // rendered `disabled` on purpose — see settings/page.tsx — so the compliance
-  // story is told by the audit log and the batch summary, both of which have
-  // real numbers behind them, and not by a settings screen that does not exist
-  // yet. Clicking a disabled tab is what failed the first two recordings.
+  // ── SEGMENT 16 · the simulator ─────────────────────────────────────
+  await navByRail(page, "Simulator", "/app/dev/simulator");
+  await beat(page, 6, "S16 · the simulator — where all of this came from");
+  await tourPage(page, { seconds: 14, label: "S16 simulator" });
+  await beat(page, 6, "S16 · fixtures, scenarios, replies, and the event stream");
+
+  // ── SEGMENT 17 · settings and test mode ────────────────────────────
+  await navByRail(page, "Settings", "/app/settings");
+  await beat(page, 4, "S17 · settings");
   const testMode = page.getByRole("tab", { name: "Test mode" });
   if (await testMode.isVisible().catch(() => false)) {
     await click(page, testMode);
-    await beat(page, 7, "S17 · Razorpay test-mode credentials");
+    await beat(page, 7, "S17 · real Razorpay test credentials");
+    await tourPage(page, { seconds: 6, label: "S17 settings" });
   } else {
-    console.log("      (no Test mode tab — this build reports NEXT_PUBLIC_ENVIRONMENT=production)");
-    await beat(page, 8, "S17 · settings (no test-mode tab on this build)");
+    console.log("      ! no Test mode tab — NEXT_PUBLIC_ENVIRONMENT reports production");
+    await beat(page, 7, "S17 · settings — no test-mode tab on this build");
   }
 
-  // ── SEGMENT 18 · close ─────────────────────────────────────────────
-  await go(page, "/app");
-  await beat(page, 6, "S18 · back to the dashboard — close");
+  // ── SEGMENT 18 · Sharma — B2B promise to pay ───────────────────────
+  await signOut(page);
+  await signIn(page, "sharma");
+  await beat(page, 4, "S18 · Sharma Distributors — business to business");
+  await navByRail(page, "Cases", "/app/cases");
+  await openCaseByName(page, state.cases.S4_meera.customer_name);
+  await beat(page, 5, "S18 · Meera Patil — a large invoice, overdue");
+  await expandStep(page, "execute");
+  await beat(page, 8, "S18 · a graduated sequence, two attempts");
+  await expandStep(page, "listen");
+  await beat(page, 10, "S18 · a promise to pay, tracked rather than chased");
+  await tourPage(page, { seconds: 7, label: "S18 case detail" });
 
-  // The table the voiceover is timed against. Segments are grouped by their
-  // "Sn ·" prefix, and each window runs from its first beat to the start of the
-  // next segment — which is the span the narration for that segment has to fill,
-  // page loads included.
+  // ── SEGMENT 19 · close ─────────────────────────────────────────────
+  await navByRail(page, "Dashboard", "/app");
+  await rest(page);
+  await beat(page, 8, "S19 · back to the dashboard — close");
+
+  await resolveAlerts();
+
+  // The table the voiceover is timed against.
   const total = (Date.now() - startedAt) / 1000;
   const segments: { name: string; from: number; to: number }[] = [];
   for (const row of timeline) {
@@ -471,10 +349,12 @@ test("demo recording", async ({ page }) => {
   }
   if (segments.length) segments[segments.length - 1].to = total;
 
-  console.log(`\n${"─".repeat(64)}\n  SEGMENT WINDOWS — time the voiceover against these\n${"─".repeat(64)}`);
+  console.log(
+    `\n${"─".repeat(64)}\n  SEGMENT WINDOWS — time the voiceover against these\n${"─".repeat(64)}`,
+  );
   for (const s of segments) {
-    const span = Math.round(s.to - s.from);
-    console.log(`  ${s.name.padEnd(5)} ${mmss(s.from)}–${mmss(s.to)}   ${String(span).padStart(3)}s`);
+    const span = String(Math.round(s.to - s.from)).padStart(3);
+    console.log(`  ${s.name.padEnd(5)} ${mmss(s.from)}–${mmss(s.to)}   ${span}s`);
   }
   console.log(`\n  video length: ${mmss(total)}   beats: ${timeline.length}`);
   console.log("  file: tests/e2e/recordings/**/*.webm\n");
