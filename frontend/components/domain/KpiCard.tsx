@@ -1,6 +1,6 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { AnimatedNumber, AnimatedPercent } from "@/components/ui/AnimatedNumber";
 import { LiftCard } from "@/components/ui/LiftCard";
@@ -32,7 +32,16 @@ export interface KpiCardProps {
   value: number;
   kind: "inr" | "count" | "percent";
   tone: KpiTone;
-  icon: LucideIcon;
+  /**
+   * The already-rendered glyph, e.g. `icon={<Layers strokeWidth={1.5} />}`.
+   *
+   * A rendered element, not a component. This is a client component, and a
+   * component reference is not serialisable across the boundary — a Server
+   * Component passing `icon={Layers}` crashes the page with "Only plain objects
+   * can be passed to Client Components", which is what the playbook detail page
+   * did. A React element survives that crossing; a `forwardRef` object does not.
+   */
+  icon: ReactNode;
   /** Rendered under the number — a denominator, a delta, a period. */
   footnote?: string;
   /** Hold the count at zero until the card scrolls into view. */
@@ -64,7 +73,7 @@ export function KpiCard({
   value,
   kind,
   tone,
-  icon: Icon,
+  icon,
   footnote,
   startOnView = false,
   className,
@@ -80,7 +89,12 @@ export function KpiCard({
       >
         <div className="flex items-start justify-between gap-3">
           <p className="text-[13px] text-ink-muted">{label}</p>
-          <Icon className={cn("size-5 shrink-0", TONE_ICON[tone])} strokeWidth={1.5} aria-hidden />
+          {/* The tone colour goes on the wrapper and the glyph inherits it
+              through currentColor, because an arbitrary node cannot be handed a
+              className the way a component could. */}
+          <span className={cn("shrink-0 [&>svg]:size-5", TONE_ICON[tone])} aria-hidden>
+            {icon}
+          </span>
         </div>
 
         <p className="mt-3 flex items-baseline gap-1 font-display font-bold tracking-[-0.03em] text-ink tabular-nums">

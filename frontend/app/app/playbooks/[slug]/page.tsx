@@ -122,7 +122,7 @@ export default async function PlaybookDetailPage({
           value={stats.totalCases}
           kind="count"
           tone="info"
-          icon={Layers}
+          icon={<Layers strokeWidth={1.5} />}
         />
         <KpiCard
           staggered
@@ -130,7 +130,7 @@ export default async function PlaybookDetailPage({
           value={stats.recoveryRate}
           kind="percent"
           tone="brand"
-          icon={Percent}
+          icon={<Percent strokeWidth={1.5} />}
           footnote={
             // A rate over zero cases is not 0% — it is unmeasured. The footnote
             // says which of the two this is rather than letting a bold 0%
@@ -144,7 +144,7 @@ export default async function PlaybookDetailPage({
           value={stats.avgHoursToRecovery ?? 0}
           kind="count"
           tone="success"
-          icon={Clock}
+          icon={<Clock strokeWidth={1.5} />}
           footnote={stats.avgHoursToRecovery == null ? "nothing recovered yet" : undefined}
         />
         <KpiCard
@@ -153,7 +153,7 @@ export default async function PlaybookDetailPage({
           value={0}
           kind="inr"
           tone="warning"
-          icon={IndianRupee}
+          icon={<IndianRupee strokeWidth={1.5} />}
           // Every send in this build is simulated. Showing a real-looking cost
           // would be the one number on the page that is invented.
           footnote="sends are simulated"

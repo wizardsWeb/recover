@@ -1,394 +1,296 @@
-# Recover — AI Revenue Recovery Agent
-
-[![Typecheck](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/typecheck.yml/badge.svg)](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/typecheck.yml)
-[![Deploy](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/deploy.yml/badge.svg)](https://github.com/wizardsWeb/razorpay_buildathon/actions/workflows/deploy.yml)
-
-Recover is a merchant-side agent for Razorpay sellers that watches the event
-stream for revenue slipping away — failed payments, abandoned checkouts, broken
-subscription mandates, overdue B2B invoices — diagnoses why each one happened,
-and works it back through Razorpay's own rails. It addresses the **agentic
-revenue recovery** track: not a dunning cron, but an agent that decides what to
-do per case and learns from what happened.
-
-What makes it different is that all four of its judgements are auditable. A
-causal DAG produces the diagnosis, so the cause is a traversal you can read
-rather than a sentence a model wrote. A contextual bandit picks the action, so
-every alternative it rejected is on the case with the reason. A T-learner gates
-whether to act at all, so the cheapest recovery — not sending anything to
-someone who would have paid regardless — is one it can choose. And the number it
-reports is measured against a deliberately untouched holdout group, so
-"incremental" means caused rather than merely coincident.
-
-Phase 13 wires it to the real Razorpay test API: webhooks are HMAC-verified,
-payment links are genuine `rzp.io` URLs, and a customer paying one closes the
-case and moves the bandit's posterior.
-
-## Quick start
-
-**Prerequisites:** Docker, Node 20, Python 3.11, Poetry, and a Supabase project.
-
-**1. Create the database.**
-
-Create a Supabase project, then apply the schema. Either:
-
-```bash
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
-
-or paste `supabase/migrations/20260101000000_initial_schema.sql` into the
-Supabase SQL editor and run it.
-
-Confirm it took — every table should come back with row security on:
-
-```sql
-select tablename, rowsecurity from pg_tables where schemaname = 'public';
-```
-
-**2. Fill in the environment.**
-
-Three files, all from `.env.example` templates:
-
-```bash
-cp .env.example .env                          # compose build args
-cp backend/.env.example backend/.env          # FastAPI
-cp frontend/.env.example frontend/.env.local  # only needed for `npm run dev`
-```
-
-The values come from **Supabase → Project Settings → API**: the project URL,
-the `anon` key, the `service_role` key, and the JWT secret.
-
-> The `NEXT_PUBLIC_*` values are **build args**, not runtime config — Next
-> inlines them into the browser bundle when it builds. Changing them means
-> rebuilding the frontend image, not just restarting it.
-
-**3. Run it.**
-
-```bash
-docker compose up --build
-```
-
-`docker-compose.override.yml` is picked up automatically and gives the backend
-hot reload against your working tree. For frontend work, run `npm run dev` in
-`frontend/` instead — it is much faster than a bind-mounted Next dev server.
-
-**4. Check it.**
-
-```bash
-curl http://localhost:8000/health     # {"status":"ok",...}
-open http://localhost:3000
-```
-
-Sign up, complete onboarding, and you land on the dashboard. Signup creates
-both an `auth.users` row and a `public.merchants` row — the `on_auth_user_created`
-trigger does the second one.
-
-## Razorpay test mode
-
-Everything below is optional. With no Razorpay keys the agent runs end to end
-against the simulator and every adapter reports itself as simulated — which is
-the state the test suite runs in. Setting the keys turns three adapters real.
-
-**1. Keys.** [dashboard.razorpay.com](https://dashboard.razorpay.com) → make sure
-the **Test mode** toggle is on → Settings → API Keys → Generate Test Key. Put
-them in `backend/.env`:
-
-```bash
-RAZORPAY_TEST_API_KEY=rzp_test_xxxxxxxxxxxx
-RAZORPAY_TEST_KEY_SECRET=...
-```
-
-**2. Webhook.** Settings → Webhooks → Add New Webhook.
-
-- URL: `https://<your-backend>/api/events/webhook`
-- Secret: any strong random string — put the same value in
-  `RAZORPAY_WEBHOOK_SECRET`
-- Events: `payment.failed`, `payment.captured`, `subscription.charged`,
-  `subscription.halted`, `invoice.payment_failed`, `payment_link.paid`
-
-Also set `RAZORPAY_WEBHOOK_MERCHANT_ID` to the merchant UUID the webhooks belong
-to. A real Razorpay webhook carries no bearer token, so there is no JWT to read
-the merchant from; the receiver resolves it from the payload's customer where it
-can and falls back to this.
-
-> Razorpay must be able to reach the URL. For local development, tunnel it
-> (`cloudflared tunnel --url http://localhost:8000`) and use the tunnel host.
-
-**3. A real subscription, for scenario S1 (optional).** In the dashboard: create
-a Plan (₹2,999, monthly), a Customer, then a Subscription. Put the ids in
-`backend/.env` and S1 fires against the real subscription instead of the
-scripted one — no code change:
-
-```bash
-RAZORPAY_DEMO_SUBSCRIPTION_ID=sub_xxxxxxxx
-RAZORPAY_DEMO_CUSTOMER_ID=cust_xxxxxxxx
-```
-
-**4. Check it.** Settings → **Test mode** in the dashboard reports what the
-server thinks is configured, lists which adapters are real, and carries the test
-cards. Or:
-
-```bash
-curl -H "Authorization: Bearer <jwt>" http://localhost:8000/api/integrations/razorpay
-```
-
-### Test credentials
-
-| Method | Value | Outcome |
-| --- | --- | --- |
-| Visa (domestic) | `4111 1111 1111 1111` | mock bank page → you pick |
-| Mastercard (domestic) | `5104 0600 0000 0008` | mock bank page → you pick |
-| Visa (international) | `4239 5360 0631 5640` | mock bank page → you pick |
-| UPI | `success@razorpay` | succeeds immediately |
-| UPI | `failure@razorpay` | fails immediately |
-
-Any CVV, any future expiry. **The cards do not decide their own outcome** —
-after entering details Razorpay shows a mock bank page with *Success* and
-*Failure* buttons and whichever you click is what happens. This is the thing
-that trips up a first demo. The UPI handles are the exception.
-
-### The loop, end to end
-
-1. A payment fails — fired by the simulator, or by Razorpay for real.
-2. The webhook is stored and 202'd; the agent runs in the background.
-3. It diagnoses, checks uplift, picks an arm, clears the guardrail.
-4. It mints a **real** payment link, stamped with the case id.
-5. You open the `rzp.io` link and pay with a test card.
-6. Razorpay fires `payment.captured`; the receiver verifies the signature.
-7. The case closes as recovered and the arm's posterior moves.
-
-Step 6 is what Phase 13 added. Before it the agent could send a real link and
-never learn whether anyone paid it.
-
-## Architecture
-
-```
-   browser
-      │
-      │  Supabase session cookie (refreshed in proxy.ts)
-      ▼
-┌─────────────────────┐        Bearer <supabase jwt>       ┌──────────────────┐
-│  Next.js 16         │ ────────────────────────────────►  │  FastAPI         │
-│  frontend :3000     │                                    │  backend :8000   │
-│                     │ ◄────────────────────────────────  │                  │
-│  server components  │            camelCase JSON          │  all business    │
-│  read Supabase      │                                    │  logic lives     │
-│  directly for reads │                                    │  here            │
-└──────────┬──────────┘                                    └────────┬─────────┘
-           │                                                        │
-           │  anon key, RLS as the user                             │  same user JWT,
-           │                                                        │  RLS as the user
-           ▼                                                        ▼
-        ┌───────────────────────────────────────────────────────────────┐
-        │  Supabase — Postgres 15 + Auth                                │
-        │  RLS on every table: merchant_id = auth.uid()                 │
-        └───────────────────────────────────────────────────────────────┘
-```
-
-Two things are worth knowing about this shape:
-
-- **The same JWT enforces RLS on both sides.** The frontend queries Supabase
-  with the user's session; the backend forwards that same token into its own
-  Supabase client. Neither relies on application code to scope a query — the
-  `merchant_id = auth.uid()` policy does it.
-- **Business logic never lives in a Next.js route handler.** Reads that a
-  server component can do directly, it does. Everything that decides or writes
-  goes through FastAPI.
-
-### The agent loop
-
-```
-Razorpay webhooks ──► /api/events/webhook ──► agent core loop
-  (HMAC-verified)      (202, then background)   │
-                                               ├─ detect      event → playbook
-                                               ├─ diagnose    causal DAG + Gemini
-                                               ├─ uplift      T-learner gate
-                                               ├─ decide      Thompson bandit
-                                               ├─ guardrail   RBI / TRAI / DPDP
-                                               ├─ execute     Razorpay APIs
-                                               │                ├─ Payment Links
-                                               │                ├─ Subscriptions
-                                               │                └─ Payment Gateway
-                                               ├─ listen       reply → intent
-                                               ├─ learn        posterior update
-                                               └─ audit        append-only trail
-                                                       │
-                        payment.captured ◄─────────────┘
-                     (closes the case, credits the arm)
-```
-
-Three exits end a pass early, each writing a terminal state and an audit row:
-the uplift check says SKIP, the guardrail says BLOCK, or the customer's reply
-says stop.
-
-## What is real and what is simulated
-
-The distinction is enforced in code, not just documented here: every
-`execution_attempts` row carries a `simulated` flag derived from the adapter's
-own response, and the adapter name differs (`razorpay_payment_links` versus
-`razorpay_payment_links_simulated`). A screen can therefore never present a
-simulated send as a real one.
-
-| Component | Status | Detail |
-| --- | --- | --- |
-| Razorpay webhooks | **Real** | HMAC-SHA256 verified over the raw body |
-| Payment Links | **Real** | Genuine `rzp.io` URLs, stamped with the case id |
-| Subscription state | **Real** | Reads `subscription.pending_update` |
-| Payment fetch | **Real** | Confirms a capture against Razorpay |
-| Customer payments | **Real** (test mode) | Test card → mock bank page |
-| WhatsApp | Simulated | Payload and body stored; nothing sent |
-| SMS / Email | Simulated | Payload stored; no provider wired |
-| Gemini diagnosis + copy | Real | Falls back to templates when unavailable |
-| Batch simulation numbers | Simulated | 1,000 synthetic cases, not merchant money |
-
-Two honest notes on the Razorpay side:
-
-- **There is no "retry this failed charge now" API.** A Razorpay subscription
-  retries on its own schedule, so `retry_charge` reads and records the pending
-  state rather than claiming to have forced a charge. The customer-facing
-  recovery is the payment link the same decision mints.
-- **Mandate re-registration is not something a merchant can do for a customer.**
-  That adapter mints a payment link described "Update your payment method",
-  which is the actual mechanism.
-
-## Layout
-
-```
-.
-├── frontend/                    Next.js 16, App Router, Tailwind 4, shadcn/Base UI
-│   ├── app/
-│   │   ├── (marketing)/         landing page — owns /
-│   │   ├── (auth)/              login, signup, onboarding
-│   │   └── app/                 the guarded dashboard at /app/*
-│   │       └── dev/simulator/   scenario control panel (development only)
-│   ├── components/
-│   │   ├── shell/               sidebar, header, page chrome
-│   │   ├── ui/                  shadcn components (CLI-managed)
-│   │   └── ...
-│   ├── lib/
-│   │   ├── supabase/            browser, server, and proxy clients
-│   │   └── api/                 typed client for the FastAPI backend
-│   └── proxy.ts                 session refresh + route guards
-│
-├── backend/                     FastAPI, Python 3.11
-│   ├── app/
-│   │   ├── api/                 events, cases, playbooks, analytics, network,
-│   │   │                        integrations, simulator
-│   │   ├── agent/               the nine-step loop, bandit, causal DAG
-│   │   ├── integrations/        Razorpay client and webhook verification
-│   │   ├── simulator/           persona fixtures, event + reply generators,
-│   │   │                        the nine scripted scenarios
-│   │   ├── auth.py              Supabase JWT verification
-│   │   └── deps.py              request-scoped user + Supabase client
-│   └── tests/
-│
-├── supabase/
-│   ├── migrations/              the frozen schema — later phases are additive
-│   └── seed.sql                 unused: fixtures are per-merchant, so the
-│                                simulator creates them at runtime
-│
-├── infra/                       Azure — Bicep template and setup scripts
-│
-├── docker-compose.yml           production-shaped stack
-├── docker-compose.override.yml  backend hot reload, loaded automatically
-└── docker-compose.prod.yml      the real production images, run locally
-```
-
-## Checks
-
-```bash
-cd frontend && npm run typecheck && npm run lint
-cd backend  && poetry run pytest && poetry run mypy app/ && poetry run ruff check app/
-```
-
-Both run in CI on every pull request — see `.github/workflows/typecheck.yml`.
-
-The database has its own check. `supabase/tests/rls_isolation.sql` applies the
-migration to a throwaway Postgres and asserts that one merchant cannot read or
-write another merchant's rows — see [`supabase/tests/README.md`](./supabase/tests/README.md).
-
-## Simulator
-
-There is no Razorpay webhook feed in development, so the simulator manufactures
-one. Sign in, then open **Simulator** in the sidebar (`/app/dev/simulator`):
-
-1. **Load demo fixtures** — creates the six persona customers from
-   [`scenarios.md`](./scenarios.md), their payment methods, and the eight-customer
-   cohort the SBI downtime beat needs. Idempotent; run it as often as you like.
-2. **Fire a scenario** — S1–S6 each write one event and open one recovery case.
-   B3 writes eight, for the cross-merchant downtime beat. B1 and B2 are the
-   batch beats, driven from `/app/batch`.
-3. **Inject a reply** — puts a customer reply on an open case, which is
-   classified for intent (including opt-out and promise-to-pay) and fed back
-   into the loop.
-4. **Reset all data** — deletes everything the simulator created for your
-   merchant. Customers you added yourself are left alone.
-
-Two things worth knowing:
-
-- The endpoints **404 outside a development environment**, whatever the frontend
-  does. An enabled simulator in production would let anyone write fabricated
-  cases into a live merchant's ledger.
-- Every payload matches `scenarios.md` exactly, and
-  `tests/simulator/test_payload_fidelity.py` reads that document to prove it. If
-  the script changes and the generator does not, the build fails.
-
-## Deployment
-
-Both apps run on **Azure Container Apps**. Pushing to `main` builds each image,
-pushes it to Azure Container Registry tagged with the commit SHA, points the
-Container Apps at it, and verifies both are serving.
-
-Setup, cost, teardown, logs, and the things that commonly go wrong are all in
-[`infra/README.md`](./infra/README.md). The short version:
-
-```bash
-az login
-# fill in the two public Supabase values in infra/main.parameters.json first
-bash infra/setup-azure.sh recover-aa centralindia prod
-bash infra/setup-github-secrets.sh
-```
-
-**Live URLs** — filled in after the first deployment; `setup-azure.sh` prints
-both, and they are also on each Container App's overview page in the portal.
+# Recover — an AI revenue recovery agent for Razorpay
+
+Every Razorpay merchant loses revenue that was already won. A card declines at the
+bank. A cart dies at the OTP screen. An autopay mandate fails on the 1st because the
+customer's salary lands on the 7th. The standard answer is a dunning cron: retry three
+times, send everyone the same reminders, and count whatever arrives afterwards as
+recovered.
+
+**Recover treats each failure as a case to diagnose, not a row to retry.** It works out
+*why* the payment failed, decides whether contacting that customer helps at all, acts
+only if compliance allows it, and then proves what it actually caused — as opposed to
+what would have happened anyway.
 
 | | |
 | --- | --- |
-| Frontend | `https://<prefix>-prod-frontend.<region>.azurecontainerapps.io` |
-| Backend | `https://<prefix>-prod-backend.<region>.azurecontainerapps.io` |
+| **Live app** | https://recover-aa-prod-frontend.ashybay-6728b979.eastasia.azurecontainerapps.io |
+| **Demo video** | **▶ [Watch the 7-minute walkthrough](ADD_YOUR_VIDEO_LINK_HERE)** · narrated |
+| **Sign in** | `demo.kajal@recoverapp.dev` · `demo.zenith@recoverapp.dev` · `demo.sharma@recoverapp.dev` — password `DemoRecover2026!` |
 
-To run the production images locally before pushing — same Dockerfiles, same
-build args, no Azure involved:
+---
 
-```bash
-docker compose -f docker-compose.prod.yml up --build
+## Contents
+
+| Section | For the reviewer who wants… |
+| --- | --- |
+| [1. The demo](#1-the-demo) | to watch it work, or drive it yourself |
+| [2. What it does](#2-what-it-does) | the feature list, in one table |
+| [3. How it works](#3-how-it-works) | the agent loop, step by step |
+| [4. The four hard parts](#4-the-four-hard-parts) | the technique, and why each choice pays |
+| [5. Results](#5-results) | the numbers, and how they were measured |
+| [6. Screenshots](#6-screenshots) | the product, without installing anything |
+| [7. System architecture](#7-system-architecture) | how the pieces fit |
+| [8. Database](#8-database) | the schema, RLS, and live rows |
+| [9. Deployment](#9-deployment) | that it really runs on Azure |
+| [10. Tech stack](#10-tech-stack) | what it is built with |
+| [11. Run it locally](#11-run-it-locally) | to run it themselves |
+| [12. What is real, what is simulated](#12-what-is-real-what-is-simulated) | to know exactly what is being claimed |
+
+---
+
+## 1. The demo
+
+**Watch:** [the 7-minute walkthrough](ADD_YOUR_VIDEO_LINK_HERE) — narrated, covering all
+three merchants and every feature below.
+
+**Or drive it yourself** at the live URL with any of the three logins above. Each is a
+separate tenant with its own customers, its own playbook configuration, and its own
+learned policy:
+
+| Merchant | Vertical | What to look at |
+| --- | --- | --- |
+| Zenith Learning | Edtech subscriptions | Suresh — causal diagnosis · Vikram — churn detected, handed to a human |
+| Kajal & Co. | D2C beauty | Priya — a generated Hinglish message · Aditya — recovered with no message at all · Sana — opted out, nothing sent |
+| Sharma Distributors | B2B distribution | Meera — a promise-to-pay, tracked instead of chased |
+
+The video is generated by a Playwright script, not screen-captured by hand —
+[`frontend/tests/e2e/demo-recording.spec.ts`](frontend/tests/e2e/demo-recording.spec.ts).
+
+---
+
+## 2. What it does
+
+| Feature | How it works | Why it matters |
+| --- | --- | --- |
+| **Causal diagnosis** | A per-playbook causal DAG runs Bayesian inference over bank, hour, instrument, customer history and live network health | `salary cycle mismatch · 0.82` is a posterior over a named hypothesis — not prose a model wrote |
+| **Action selection** | Contextual bandit, Thompson sampling, one posterior per bank × method × hour × value bucket | Exploration scales with uncertainty. No epsilon to tune, no schedule to decay |
+| **Uplift targeting** | A T-learner trained against a held-out control group sorts customers into persuadable / sure thing / lost cause / do-not-disturb | The agent can decline to spend a message on someone who would have paid anyway |
+| **Compliance guardrail** | RBI retry limits, TRAI quiet hours and per-customer consent, checked *before* an action is chosen | Blocks are counted and reported, so "zero violations" has a denominator |
+| **Message generation** | Gemini drafts in the customer's language and the brand's voice, with a database-backed prompt cache and deterministic fallbacks | A model outage degrades the copy instead of breaking the loop |
+| **Reply understanding** | Classifies Hinglish and English replies into churn, promise-to-pay, opt-out, dispute | *"baaki 25 tak"* becomes a tracked promise, not another reminder |
+| **Human handoff** | Churn and dispute intents stop the agent and escalate with full context | Retention is not a retry |
+| **Network intelligence** | Success rates pooled across merchants by bank × method × hour; only rates are shared, never customer data | One merchant cannot tell a bank outage from bad luck. The network can |
+| **Incremental ROI** | One case in twenty is held out untouched | Makes the headline figure incremental rather than gross |
+| **Audit trail** | Every step, actor, and case written append-only | *"The model decided"* is not an answer you can give a regulator |
+| **Batch simulator** | Replays hundreds of cases through both the bandit and a fixed rule over the same customers | Proves the learning is worth its cost, on camera |
+
+---
+
+## 3. How it works
+
+One failed payment, start to finish. Every step writes its reasoning to the database,
+and the case page shows all of it.
+
+```
+webhook ──► detect ──► diagnose ──► uplift check ──► decide ──► guardrail ──► execute ──► listen ──► learn
 ```
 
-## Submission checklist
+| Step | What happens |
+| --- | --- |
+| **detect** | Routes the event to one of four playbooks: failed payment, abandoned checkout, subscription failure, overdue invoice |
+| **diagnose** | Causal DAG returns a ranked root cause with its alternatives and their posteriors |
+| **uplift check** | Predicts whether contact changes the outcome. If not, the loop stops here — and that is a success, not a failure |
+| **decide** | The bandit picks an action and records every arm it passed over, with confidence |
+| **guardrail** | RBI retry caps, TRAI quiet hours, consent. A block is recorded with its reason |
+| **execute** | A Razorpay retry or payment link, or a generated WhatsApp message. Every attempt is logged |
+| **listen** | Classifies any reply and applies it — pause and track a promise, stop and hand off on churn, honour an opt-out |
+| **learn** | Posts the reward to the bandit posterior and updates the causal edge weights |
 
-Against the problem statement's bar:
+---
 
-- **Detects revenue at risk** — four event types across four playbooks, plus
-  cross-merchant bank/method downtime detection in ~91s.
-- **Determines the right intervention** — contextual Thompson bandit over per-
-  playbook arms, conditioned on bank, method, hour and LTV band; every rejected
-  alternative is on the case with its posterior.
-- **Executes a bounded recovery workflow** — a nine-step loop with three early
-  exits, per-action idempotency keys, and execution through Razorpay's rails.
-- **Measures money recovered across a batch** — 1,000 synthetic cases:
-  **₹14.8L gross, ₹9.2L incremental**, 35.2% settled recovery rate against a
-  rule-based baseline on the same customers. Simulated cases, measured honestly.
-- **Compliant escalation** — RBI retry ceilings, TRAI quiet hours, DPDP consent,
-  and a human handoff that carries the case's history.
-- **Stopping rules** — explicit opt-out, hardship signal, churn confirmation,
-  max attempts per day and week, a hard day cap, and the RBI per-cycle limit.
-- **Audit trail** — every decision, its reasoning, its alternatives, and every
-  guardrail check, appended and never mutated.
+## 4. The four hard parts
 
-The 300-word narrative is in
-[`docs/submission-narrative.md`](./docs/submission-narrative.md).
+Four claims a reviewer should push on, and what backs each one.
 
-## Phases
+**The diagnosis is a traversal, not a sentence.** Anyone can ask an LLM why a payment
+failed. The DAG produces a posterior over named hypotheses, so the answer is inspectable
+and the alternatives are visible. Gemini writes the explanation *of* the inference; it
+does not perform it.
 
-The full plan, phase by phase, is in [`phase-plan.md`](./phase-plan.md).
-Scenario walkthroughs are in [`scenarios.md`](./scenarios.md).
+**The decision names what it rejected.** The case page shows every arm the bandit
+considered with its posterior and its draw. A recommendation you cannot argue with is one
+you cannot trust — and a bandit that only shows its winner is indistinguishable from a
+hardcoded rule.
+
+**The measurement is honest by construction.** Gross recovery is a vanity number: some of
+those customers would have paid regardless. Holding one case in twenty untouched costs
+real recoveries, and it is the only thing that turns a number into a claim.
+
+**The intelligence compounds.** A merchant's first case in a new context starts from what
+the network learned about that bank an hour ago, not from a flat prior. This is the part a
+standalone tool cannot build — it needs a party that sees every merchant's retries, which
+is a position Razorpay holds.
+
+---
+
+## 5. Results
+
+From the batch run visible at `/app/batch` in the live app — 200 cases, both policies
+deciding the *same* customers:
+
+| | |
+| --- | --- |
+| Settled recovery rate | **36.0%** bandit vs **26.0%** fixed rule |
+| Bandit overtakes baseline | case **50** |
+| Gross recovered | **₹12,40,320** |
+| Incremental (vs holdout) | **₹8,85,477** — 71% of gross |
+| Compliance violations | **0**, against 15 retries and 17 messages the guardrail blocked |
+| Opt-outs honoured | 2 of 2 |
+| Escalated to a human | 4 |
+
+The bandit *loses* early in that curve, and the dip is the point: exploration costs real
+recoveries, and a policy that started ahead would be one that never had to learn.
+
+---
+
+## 6. Screenshots
+
+> Images live in [`docs/screenshots/`](docs/screenshots/) — see that folder's README for
+> the full list.
+
+| | |
+| --- | --- |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Cases](docs/screenshots/cases.png) |
+| **Dashboard** — recovery funnel, not a message count | **Cases** — every case with its uplift bucket |
+| ![Causal diagnosis](docs/screenshots/causal-dag.png) | ![Bandit](docs/screenshots/bandit.png) |
+| **Diagnosis** — root cause with its alternatives | **Decision** — the arms it passed over |
+| ![Batch](docs/screenshots/batch.png) | ![ROI](docs/screenshots/roi.png) |
+| **Batch** — bandit against a fixed rule | **ROI** — gross against incremental |
+| ![Network](docs/screenshots/network.png) | ![Audit](docs/screenshots/audit.png) |
+| **Network** — pooled bank health, live outage | **Audit** — every decision, append-only |
+
+---
+
+## 7. System architecture
+
+![System architecture](docs/architecture/system-architecture.png)
+
+> Source in [`docs/architecture/`](docs/architecture/).
+
+Six layers, top to bottom:
+
+1. **Entry** — Razorpay webhooks (HMAC-verified) and a built-in simulator that
+   manufactures the same events. The simulator returns 404 outside development.
+2. **Frontend** — Next.js 16 App Router. `proxy.ts` refreshes the Supabase session and
+   guards `/app/*` before any page renders. All domain data comes through the API,
+   never straight from the database.
+3. **API and auth** — FastAPI. Supabase issues an ES256 JWT; the API verifies it against
+   the project's JWKS, and the same token is attached to the database client so **Postgres
+   RLS** enforces tenant isolation rather than application code remembering a `WHERE`.
+4. **Agent loop** — the eight steps in [§3](#3-how-it-works), run as background tasks.
+5. **Models** — bandit posteriors, uplift snapshots, causal DAG weights, the Gemini
+   prompt cache, and the pooled network statistics.
+6. **Data** — Supabase Postgres, RLS on every merchant-scoped table.
+
+---
+
+## 8. Database
+
+Supabase Postgres. Schema in
+[`supabase/migrations/`](supabase/migrations/); **snapshots of the live database in
+[`docs/database/`](docs/database/)**.
+
+| Group | Tables |
+| --- | --- |
+| Tenancy | `merchants`, `customers`, `payment_methods` |
+| Recovery | `events`, `recovery_cases`, `agent_decisions`, `execution_attempts`, `customer_replies` |
+| Learning | `bandit_arms`, `bandit_posteriors`, `bandit_rewards`, `uplift_model_snapshots`, `uplift_holdouts`, `causal_dag`, `causal_edge_updates` |
+| Network | `network_stats`, `network_alerts` |
+| Evidence | `audit_events`, `batch_runs`, `llm_cache` |
+
+Two things worth checking in those snapshots:
+
+- **RLS is on for every merchant-scoped table.** Tenant isolation is enforced by the
+  database, so a missing filter in application code cannot leak another merchant's data.
+- **`merchants.id` is `auth.users.id`.** A trigger creates the merchant row on signup, so
+  a user and their tenant cannot drift apart.
+
+---
+
+## 9. Deployment
+
+Live on Azure Container Apps. **Screenshots in [`docs/deployment/`](docs/deployment/).**
+
+```
+push to main ──► GitHub Actions ──► build images ──► Container Registry ──► Container Apps
+                    (typecheck)                            │
+                                                      Key Vault ──► managed identity
+```
+
+| Piece | What it does |
+| --- | --- |
+| Azure Container Apps | Frontend and backend, 1–3 replicas each |
+| Container Registry | Holds both images |
+| Key Vault | Every secret, read at runtime through a **user-assigned managed identity** — no credentials in the repo or the images |
+| Log Analytics + App Insights | Logs and traces |
+| Bicep | The whole environment as code — [`infra/main.bicep`](infra/main.bicep) |
+| GitHub Actions | [`typecheck.yml`](.github/workflows/typecheck.yml) on every push, [`deploy.yml`](.github/workflows/deploy.yml) on `main` |
+
+```bash
+az deployment group create \
+  --resource-group <rg> \
+  --template-file infra/main.bicep \
+  --parameters infra/main.parameters.json
+```
+
+---
+
+## 10. Tech stack
+
+| Layer | Choice |
+| --- | --- |
+| Frontend | Next.js 16 (App Router, RSC), React 19, TypeScript, Tailwind, Recharts, Framer Motion |
+| Backend | FastAPI, Python 3.11, Pydantic, structlog |
+| Database & auth | Supabase — Postgres, RLS, Auth (ES256 JWT), Realtime |
+| AI | Google Gemini (`gemini-2.5-flash`) with a database prompt cache |
+| ML | Thompson-sampling contextual bandit · T-learner uplift · Bayesian causal DAG |
+| Payments | Razorpay — Payment Links, Subscriptions, Payment Gateway, webhooks |
+| Infra | Azure Container Apps, Container Registry, Key Vault, App Insights, Bicep |
+| Testing | 583 backend tests (pytest) · Playwright for the demo recording |
+
+---
+
+## 11. Run it locally
+
+**Prerequisites:** Docker, Node 20, Python 3.11, Poetry, and a Supabase project.
+
+```bash
+# 1. Schema
+supabase link --project-ref <your-project-ref> && supabase db push
+#    or paste supabase/migrations/*.sql into the Supabase SQL editor
+
+# 2. Environment — values from Supabase → Project Settings → API
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+
+# 3. Run
+docker compose up --build          # backend :8000, frontend :3000
+cd frontend && npm run dev         # or the frontend on its own
+
+# 4. Seed a full demo — three merchants, six personas, all scenarios
+cd backend && .venv/bin/python scripts/prepare_demo.py
+```
+
+`prepare_demo.py` is what produced the data in the video: it creates the merchants,
+loads fixtures, trains the uplift models, fires all six scenarios, runs a batch, and
+writes `demo_state.json`.
+
+---
+
+## 12. What is real, what is simulated
+
+Stated plainly, because a demo that blurs this is not worth trusting.
+
+| | |
+| --- | --- |
+| **Real** | Razorpay integration in test mode — payment links are genuine `rzp.io` URLs, and paying one closes its case and moves the bandit posterior. Webhooks are HMAC-verified. Gemini calls are real. Supabase Auth, RLS, and Realtime are real. The Azure deployment is real. |
+| **Simulated** | The customers and their payment failures — generated by the built-in simulator, because real ones do not fail on a schedule that suits a demo. WhatsApp sends go to a simulated adapter; the case detail shows `"simulated": true` beside every one. |
+
+The agent cannot tell the difference between a simulated event and a real webhook — both
+arrive through the same endpoint and run the same loop. That is the point of the
+simulator, and it is why the behaviour you see is the behaviour you would get.
+
+**The data is seeded deliberately, not faked:** three merchants across different
+verticals, six customer personas, and hundreds of historical cases *with a real holdout
+group*, so every feature is exercised against data that behaves like the real thing.
