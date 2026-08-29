@@ -63,3 +63,11 @@ backend/scripts/demo_state.json
 frontend/tests/e2e/recordings/
 frontend/test-results/
 docs/demo-recording.mp4
+
+# Rendered demo media. All of it is regenerable: the video from
+# frontend/tests/e2e/demo-recording.spec.ts, the audio from
+# docs/voiceover/build-voiceover.py. Together they run to well over 100MB.
+docs/demo-recording-1.5x.mp4
+docs/demo-with-voiceover.mp4
+docs/voiceover.mp3
+docs/voiceover/segments/

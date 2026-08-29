@@ -1,0 +1,141 @@
+{
+  "_comment": "Source of truth for the voiceover. `start` and `window` are seconds in the 1.5x cut (docs/demo-recording-1.5x.mp4, 7:11). They are the original recording's measured segment windows divided by 1.5. build-voiceover.py reads this file, renders each segment with macOS `say`, checks it fits its window, and lays them onto one aligned track.",
+  "video": "docs/demo-recording-1.5x.mp4",
+  "speed": 1.5,
+  "source_length_seconds": 640,
+  "segments": [
+    {
+      "id": "S01",
+      "title": "the problem",
+      "start": 0,
+      "window": 15.3,
+      "text": "Every business taking payments online loses money to failures it never sees. A card declines. A mandate lapses. A cart dies at checkout. The usual fix is one reminder, sent to everybody who failed."
+    },
+    {
+      "id": "S02",
+      "title": "multi-tenant sign-in",
+      "start": 15.3,
+      "window": 16.0,
+      "text": "Recover instead works out why each payment failed, then decides whether contacting that customer helps at all. Sometimes the answer is no, and that matters more than anything else here. I'm signing in as Zenith Learning, an edtech business where the monthly mandate is what breaks."
+    },
+    {
+      "id": "S03",
+      "title": "the dashboard",
+      "start": 31.3,
+      "window": 18.7,
+      "text": "This is a funnel, not a count of messages sent. How many payments failed. How many were worth acting on. How many actually came back. That third number is the only one that pays for anything, and most recovery tools cannot tell you it, because they never hold a group back to compare against."
+    },
+    {
+      "id": "S04",
+      "title": "causal diagnosis",
+      "start": 50.0,
+      "window": 36.0,
+      "text": "Suresh Iyer. Two thousand nine hundred and ninety-nine rupees. A subscription renewal that failed. The agent builds a causal graph, a D A G. In plain terms, it maps what causes what, so it can tell a bank outage apart from an empty account, instead of just correlating them. The root cause it returns: a salary cycle mismatch, with a competing E M I taking the money first. He isn't short of money. He's short of money on the first of the month. And it shows what else it considered, with confidence for each. A diagnosis you can argue with is one you can trust."
+    },
+    {
+      "id": "S05",
+      "title": "bandit and guardrail",
+      "start": 86.0,
+      "window": 23.3,
+      "text": "Knowing the cause isn't knowing what to do. A contextual bandit picks the action, using Thompson sampling. Plainly: it keeps a probability curve for each option, and draws from it, so it explores while it's unsure and commits once it's confident. It chose to retry on the date his salary lands. Then two gates: R B I retry limits, T R A I quiet hours, and his own consent."
+    },
+    {
+      "id": "S06",
+      "title": "Vikram, churn and handoff",
+      "start": 109.3,
+      "window": 26.0,
+      "text": "Vikram replied in Hinglish: beta ab coaching nahi le raha, cancel kar do please. Gemini read it as churn confirmation, ninety-three per cent confidence. This is not a payment problem, it's a cancellation. So the agent stopped, generated a real Razorpay payment link in test mode, and handed the case to a human. Retention isn't a retry, and an agent that knows where its judgment ends is worth more than one that doesn't."
+    },
+    {
+      "id": "S07",
+      "title": "playbooks and learned arms",
+      "start": 135.3,
+      "window": 24.7,
+      "text": "Four playbooks, and inside one, everything it has learned. Every action, its win rate, how often it was tried, and the interval around it. WhatsApp saved cart at eight per cent is winning at seventy-three. Twelve per cent does worse. A bigger discount, fewer recoveries. You would not have guessed that. You measure it. The merchant sets the limits and the agent learns inside them."
+    },
+    {
+      "id": "S08",
+      "title": "tenant switch",
+      "start": 160.0,
+      "window": 19.3,
+      "text": "Different business, same agent. Kajal and Company, a direct to consumer beauty brand. Different customers, a different playbook, and a policy trained on its own traffic. Every merchant gets their own model. Nobody inherits anyone else's mistakes, and no customer data leaves their account."
+    },
+    {
+      "id": "S09",
+      "title": "Priya, the generated message",
+      "start": 179.3,
+      "window": 31.3,
+      "text": "Priya abandoned a cart worth one thousand two hundred and forty rupees. Root cause: price sensitivity at checkout. Gemini drafts the message in her language and the brand's voice, with an eight per cent offer, and hands it to the WhatsApp adapter. That discount isn't a default sent to everybody. It's the arm the bandit chose for her segment, measured against the ones it rejected. The agent is deciding how much margin to give away, customer by customer."
+    },
+    {
+      "id": "S10",
+      "title": "Aditya, the silent recovery",
+      "start": 210.6,
+      "window": 19.3,
+      "text": "Aditya's payment failed too, but the cause was a transient issuer error. The bank simply dropped it, and a retry fixes that on its own. So nobody messaged him. No discount, no WhatsApp, nothing. Eight hundred and forty rupees recovered in silence. The best recovery message is very often the one you never send."
+    },
+    {
+      "id": "S11",
+      "title": "Sana, consent first",
+      "start": 229.9,
+      "window": 15.3,
+      "text": "Sana had opted out. Look at her case: there are no steps at all. The consent check ran before the agent chose anything, and then it chose nothing. Compliance here isn't a filter at the end. It's the first gate."
+    },
+    {
+      "id": "S12",
+      "title": "the learning curve",
+      "start": 245.2,
+      "window": 25.3,
+      "text": "Does this beat a fixed rule? Two hundred cases, both policies, the same customers. The bandit loses early, and that dip is the point: exploration costs real recoveries. A policy that started ahead never had to learn. It overtakes at case fifty, and settles at thirty six per cent against twenty six. Underneath: zero compliance violations."
+    },
+    {
+      "id": "S13",
+      "title": "incremental ROI",
+      "start": 270.5,
+      "window": 20.0,
+      "text": "Twelve lakh forty thousand recovered. But gross recovery is a vanity number: some of those customers would have paid anyway. Against a held out control group, the real contribution is eight lakh eighty five thousand. That's uplift modelling. Leave some customers alone, so you can prove what you caused."
+    },
+    {
+      "id": "S14",
+      "title": "the audit trail",
+      "start": 290.5,
+      "window": 22.0,
+      "text": "Every decision is here. Which step, which actor, which case, what time. This is a log of reasoning, not of messages, so you can take any outcome and walk backwards to the evidence behind it. That matters, because the model decided is not an answer you can give a regulator, or a merchant asking why one customer got a discount and the next one didn't."
+    },
+    {
+      "id": "S15",
+      "title": "the network effect",
+      "start": 312.5,
+      "window": 28.7,
+      "text": "No single business sees enough failures to know whether a bank is down, or it was just unlucky. Across the network, everyone does. Five banks, twenty four hours, success rates pooled. No customer data leaves any account, only the rates. Now watch. S B I's U P I stack drops to thirty one per cent, against a normal of eighty two. Every agent stops retrying into it, before those retries burn a customer's patience."
+    },
+    {
+      "id": "S16",
+      "title": "the simulator and seeded data",
+      "start": 341.2,
+      "window": 20.7,
+      "text": "And this is where all of it came from. We seeded realistic data on purpose: three merchants in different verticals, six customer personas, and hundreds of historical cases with a real control group, so every feature is exercised against data that behaves like the real thing."
+    },
+    {
+      "id": "S17",
+      "title": "real Razorpay, test mode",
+      "start": 361.9,
+      "window": 25.3,
+      "text": "It's wired to a real Razorpay account in test mode. Real keys, real payment links, real webhooks coming back. The link in Vikram's case is live. Nothing here is a mock or a screenshot. The payment rail is genuinely connected. It's the customers who are synthetic, and only because real ones don't fail on a schedule that suits a demo. The agent cannot tell the difference, so what you saw it do is what it does."
+    },
+    {
+      "id": "S18",
+      "title": "Meera, promise to pay",
+      "start": 387.2,
+      "window": 33.3,
+      "text": "Third business, a different problem. Sharma Distributors, business to business, one lakh forty five thousand rupees overdue. No discount codes here. That would be insulting, and it wouldn't work. A graduated sequence instead: polite first, firmer second. Then Meera replied: fifty per cent abhi kar deti hoon, baaki twenty five tak. Gemini read it as a promise to pay. Half now, the rest by the twenty fifth. So the agent stood down and paused until that date. It isn't chasing her, because she already answered."
+    },
+    {
+      "id": "S19",
+      "title": "close",
+      "start": 420.5,
+      "window": 10.0,
+      "text": "Find the cause. Decide if contact helps. Prove what it earned. That's Recover."
+    }
+  ]
+}
