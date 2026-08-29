@@ -18,8 +18,8 @@ export function ScrollCue() {
 
   return (
     <a
-      href="#how-it-works"
-      aria-label="Skip to how it works"
+      href="#leaks"
+      aria-label="Skip to the next section"
       className="absolute inset-x-0 bottom-8 mx-auto flex w-fit rounded-full p-2 text-sidebar-gold transition-opacity duration-150 hover:opacity-70 focus-visible:ring-3 focus-visible:ring-white/40 focus-visible:outline-none"
     >
       <motion.span

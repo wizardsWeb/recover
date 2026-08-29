@@ -19,7 +19,7 @@ export interface LandingSection {
 export const LANDING_SECTIONS: readonly LandingSection[] = [
   { id: "top", label: "Home" },
   { id: "leaks", label: "Product" },
-  { id: "how-it-works", label: "Case studies" },
+  { id: "how-it-works", label: "How it works" },
   { id: "results", label: "Results" },
   { id: "start", label: "Contact" },
 ];

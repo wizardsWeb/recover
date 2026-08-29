@@ -4,24 +4,6 @@ import { IMAGE_CREDITS } from "@/lib/assets/images";
 export default function MarketingLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh flex-col">
-      {/*
-        Bubbledot, the hero's dot-matrix face, loaded here and only here.
-
-        The app layout never links it, so no dashboard route pays for a font it
-        does not draw with — the whole reason this is a `<link>` in one layout
-        rather than a `next/font` import in the root. `preconnect` is separate
-        from the stylesheet because the font *files* come from a different
-        origin than the CSS that names them, and without it the browser only
-        starts that second handshake after parsing the @font-face rule.
-
-        The licence (CC BY 4.0) requires credit, which the footer gives.
-      */}
-      <link rel="preconnect" href="https://db.onlinewebfonts.com" crossOrigin="anonymous" />
-      <link
-        rel="stylesheet"
-        href="https://db.onlinewebfonts.com/c/8cb707a9b8a73f8a7403336b861c3074?family=BubbledotICG-FinePos"
-      />
-
       {/* Fixed rather than sticky, and outside `main`: it floats over the hero
           video from the first frame instead of being a bar the page pushes
           down. */}

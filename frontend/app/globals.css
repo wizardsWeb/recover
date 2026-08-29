@@ -130,6 +130,14 @@
   --sidebar-hover: rgb(255 255 255 / 0.04);
   --sidebar-gold: #f0b457;
 
+  /* Brand blue for anything drawn on a permanently dark ground — the rail, and
+     the landing page's dark sections. The deep #1a56db that clears 5.9:1 on
+     paper measures 1.6:1 on near-black, which is a colour nobody can see. Held
+     here with the sidebar tokens rather than in the theme swap because these
+     surfaces are dark in both modes, so a `.dark` override would never fire on
+     the half of visits that matter. */
+  --brand-on-dark: #7ea6f5;
+
   /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
      literals in the component. Not folded into --success-subtle: the point of
      this bubble is that a merchant recognises the channel at a glance, and a
@@ -300,6 +308,7 @@
   --color-sidebar-active: var(--sidebar-active);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-gold: var(--sidebar-gold);
+  --color-brand-on-dark: var(--brand-on-dark);
 
   /* WhatsApp's own brand green, for the one bubble that should look like an
      actual WhatsApp message. */
@@ -411,14 +420,29 @@
 @layer components {
   /* The landing page's display face, and nowhere else.
      ---------------------------------------------------------------------
-     A retro dot-matrix, loaded from a third-party CDN by the marketing
-     layout alone — the app layout never links it, so no dashboard route
-     pays for a font it does not draw with. The class is declared here
-     rather than in the layout because a `style` attribute cannot carry the
-     fallback, and a headline that renders in Bubbledot on one connection
-     and in nothing at all on another is a headline that disappears.
-     Sora is the fallback: the same display voice at the same weight, so a
+     Self-hosted, 5KB, from `public/fonts`. It was originally linked from
+     the CDN that publishes it, which meant a third party could change what
+     arrives at the top of the critical path of the only page a stranger
+     ever sees — an external stylesheet can do considerably more than pick a
+     typeface. Copying 5KB into the repository ends that, and the CC BY 4.0
+     licence the face ships under permits the copy; the footer carries the
+     credit it requires.
+
+     Declaring the face here rather than in the marketing layout costs the
+     dashboard nothing. `@font-face` is lazy: a browser fetches the file
+     only when a rule that names the family actually matches an element, and
+     no dashboard route uses `.font-dotmatrix`.
+
+     Sora is the fallback — the same display voice at the same weight — so a
      failed font request costs the texture and not the layout. */
+  @font-face {
+    font-family: "BubbledotICG-FinePos";
+    src: url("/fonts/bubbledot-icg-finepos.woff2") format("woff2");
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
   .font-dotmatrix {
     font-family: "BubbledotICG-FinePos", var(--font-display);
   }
