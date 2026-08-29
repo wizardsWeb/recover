@@ -44,7 +44,7 @@ export function Header({ email, businessName }: HeaderProps) {
         {isProduction && (
           <span
             title="You are on the production deployment"
-            className="mr-2 hidden rounded-full border border-hairline bg-subtle px-2 py-0.5 font-mono text-[10px] tracking-wider text-ink-faint uppercase sm:inline-block"
+            className="mr-2 hidden rounded-full border border-hairline bg-subtle px-2 py-0.5 font-mono text-[10px] tracking-[0.06em] text-ink-faint uppercase sm:inline-block"
           >
             production
           </span>

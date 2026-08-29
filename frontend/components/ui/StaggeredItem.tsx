@@ -24,7 +24,18 @@ interface StaggeredItemProps {
 }
 
 /**
- * One item of a list that enters with a stagger.
+ * One item of a list that enters with a stagger, delayed by its own index.
+ *
+ * The index-driven sibling of `StaggerList`/`StaggerItem`, and both exist on
+ * purpose. `StaggerList` schedules its children through Framer variants, which
+ * needs the parent to be a `motion` element — fine for a grid or a `tbody`,
+ * impossible inside a `<form>` or a `<RadioGroup>` whose parent is owned by
+ * another component. This one computes its own delay instead, so it can be
+ * dropped anywhere, at the cost of a `maxDelay` clamp the variant version gets
+ * for free.
+ *
+ * Reach for `StaggerList` when you control the container; reach for this when
+ * you do not.
  *
  * Motion is skipped outright when the reader has asked for reduced motion —
  * `useReducedMotion` resolves to the same value on server and client, so both

@@ -138,6 +138,17 @@
      the half of visits that matter. */
   --brand-on-dark: #7ea6f5;
 
+  /* The landing page's floating nav pill, which is white in both colour modes
+     for the same reason the rail is dark in both: it sits on a video, and
+     there is no theme in which the frame behind it is predictable. Held as
+     tokens rather than as literals in the component so the one place in the
+     product with a fixed-light surface is still findable from this file. */
+  --navpill-bg: #ffffff;
+  --navpill-fg: #2e2e2e;
+  --navpill-fg-strong: #000000;
+  --navpill-cta-bg: #111111;
+  --navpill-shadow: 0 4px 14px rgb(0 0 0 / 0.16);
+
   /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
      literals in the component. Not folded into --success-subtle: the point of
      this bubble is that a merchant recognises the channel at a glance, and a
@@ -309,6 +320,11 @@
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-gold: var(--sidebar-gold);
   --color-brand-on-dark: var(--brand-on-dark);
+  --color-navpill-bg: var(--navpill-bg);
+  --color-navpill-fg: var(--navpill-fg);
+  --color-navpill-fg-strong: var(--navpill-fg-strong);
+  --color-navpill-cta-bg: var(--navpill-cta-bg);
+  --shadow-navpill: var(--navpill-shadow);
 
   /* WhatsApp's own brand green, for the one bubble that should look like an
      actual WhatsApp message. */

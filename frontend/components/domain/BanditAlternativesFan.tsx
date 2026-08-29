@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BanditAlternative } from "@/lib/api/cases";
 
 /**
@@ -63,7 +64,14 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
             .join(" · ");
 
           return (
-            <div key={alt.arm_name} className="flex items-center gap-2" title={tooltip}>
+            // A real tooltip rather than `title`: what is in it — why this arm
+            // lost, what it drew this round, how much history it has — is the
+            // argument for the decision, and a native tooltip cannot be reached
+            // by keyboard at all.
+            <Tooltip key={alt.arm_name}>
+              <TooltipTrigger
+                render={<div className="flex items-center gap-2" tabIndex={tooltip ? 0 : -1} />}
+              >
               <span
                 className={`w-[110px] shrink-0 truncate xl:w-[180px] font-mono text-[11px] ${
                   alt.chosen ? "font-semibold text-ink" : "text-ink-faint"
@@ -98,35 +106,64 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
               >
                 {alt.is_cold ? "—" : `${pct}%`}
               </span>
-            </div>
+              </TooltipTrigger>
+              {tooltip ? <TooltipContent>{tooltip}</TooltipContent> : null}
+            </Tooltip>
           );
         })}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
         {contextBucket ? (
-          <span
-            className="rounded-4xl bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
-            title="Arms are learned per context — bank, method, time of day, LTV band"
-          >
-            {contextBucket}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
+                />
+              }
+            >
+              {contextBucket}
+            </TooltipTrigger>
+            <TooltipContent>
+              Arms are learned per context — bank, method, time of day, LTV band
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
         {banditMode === "explore" ? (
-          <span
-            className="rounded-4xl bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
-            title="This arm's draw beat an arm with a higher mean — the pull buys information"
-          >
-            Explore
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
+                />
+              }
+            >
+              Explore
+            </TooltipTrigger>
+            <TooltipContent>
+              This arm&rsquo;s draw beat an arm with a higher mean — the pull buys information
+            </TooltipContent>
+          </Tooltip>
         ) : banditMode === "exploit" ? (
-          <span
-            className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
-            title="This arm has both the best draw and the standing evidence"
-          >
-            Exploit
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
+                />
+              }
+            >
+              Exploit
+            </TooltipTrigger>
+            <TooltipContent>
+              This arm has both the best draw and the standing evidence
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
         {ranked.some((alt) => alt.is_cold) ? (

@@ -35,12 +35,12 @@ export function LandingNav() {
     <div className="pointer-events-none fixed inset-x-0 top-5 z-50 flex justify-center px-4">
       <nav
         aria-label="Main"
-        className="pointer-events-auto flex items-center gap-1 rounded-full bg-white py-1.5 pr-1.5 pl-2 shadow-[0_4px_14px_rgb(0_0_0/0.16)]"
+        className="pointer-events-auto flex items-center gap-1 rounded-full bg-navpill-bg py-1.5 pr-1.5 pl-2 shadow-navpill"
       >
         <Link
           href="/"
           aria-label="Recover — home"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-black/10 transition-transform duration-150 hover:scale-105"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navpill-bg ring-1 ring-black/10 transition-transform duration-150 hover:scale-105"
         >
           <span aria-hidden className="font-display text-sm leading-none font-bold text-gold">
             ₹R
@@ -56,12 +56,12 @@ export function LandingNav() {
                   href={`#${section.id}`}
                   aria-current={active ? "true" : undefined}
                   className={cn(
-                    "relative block rounded-full px-3.5 py-1.5 text-sm font-medium text-[#2e2e2e] transition-colors duration-150 hover:text-black",
+                    "relative block rounded-full px-3.5 py-1.5 text-sm font-medium text-navpill-fg transition-colors duration-150 hover:text-navpill-fg-strong",
                     // The three dots. `currentColor` would make them fade with
                     // the link's own hover transition; they are a state marker,
                     // so they stay put.
                     active &&
-                      "after:absolute after:bottom-0.5 after:left-1/2 after:size-[3px] after:-translate-x-1/2 after:rounded-full after:bg-black after:shadow-[-6px_0_0_black,6px_0_0_black] after:content-['']",
+                      "after:absolute after:bottom-0.5 after:left-1/2 after:size-[3px] after:-translate-x-1/2 after:rounded-full after:bg-navpill-fg-strong after:shadow-[-6px_0_0_var(--navpill-fg-strong),6px_0_0_var(--navpill-fg-strong)] after:content-['']",
                   )}
                 >
                   {section.label}
@@ -73,7 +73,7 @@ export function LandingNav() {
 
         <Link
           href="/login"
-          className="ml-1 hidden rounded-full bg-[#111] px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-black md:block"
+          className="ml-1 hidden rounded-full bg-navpill-cta-bg px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-navpill-fg-strong md:block"
         >
           Sign in
         </Link>
@@ -88,7 +88,7 @@ export function LandingNav() {
               <button
                 type="button"
                 aria-label="Open menu"
-                className="flex size-9 items-center justify-center rounded-full text-[#2e2e2e] transition-colors duration-150 hover:bg-black/5 md:hidden"
+                className="flex size-9 items-center justify-center rounded-full text-navpill-fg transition-colors duration-150 hover:bg-black/5 md:hidden"
               >
                 <Menu className="size-5" strokeWidth={1.75} aria-hidden />
               </button>

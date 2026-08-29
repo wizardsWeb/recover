@@ -91,7 +91,7 @@ export function HumanHandoffCard({ payload }: { payload: HandoffPayload }) {
 
       {actions.length > 0 ? (
         <div className="space-y-1">
-          <div className="text-[10px] tracking-wide text-ink-faint uppercase">
+          <div className="text-[10px] tracking-[0.06em] text-ink-faint uppercase">
             Suggested next steps
           </div>
           <ul className="space-y-0.5">

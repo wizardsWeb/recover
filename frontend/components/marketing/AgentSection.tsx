@@ -106,7 +106,7 @@ const TONES: Record<TimelineStep["tone"], string> = {
  */
 function ConsoleMockup() {
   return (
-    <figure className="overflow-hidden rounded-xl border border-white/10 bg-elevated shadow-[0_24px_60px_rgb(0_0_0/0.45)]">
+    <figure className="overflow-hidden rounded-card border border-white/10 bg-elevated shadow-[0_24px_60px_rgb(0_0_0/0.45)]">
       {/* Chrome. The dots are decorative and carry no state — they are the
           three pixels that say "this is a browser" and nothing more. */}
       <div className="flex items-center gap-2 border-b border-hairline bg-subtle px-4 py-3">

@@ -17,7 +17,7 @@ export default function AuditLoading() {
         <Skeleton className="h-4 w-80" />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-hairline bg-elevated">
+      <div className="mt-6 overflow-hidden rounded-card border border-hairline bg-elevated">
         <div className="divide-y divide-hairline">
           {ROWS.map((row) => (
             <div key={row} className="flex items-center gap-3 px-4 py-3">

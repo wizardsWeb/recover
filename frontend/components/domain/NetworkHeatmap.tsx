@@ -23,12 +23,7 @@
 import { useEffect, useState, useTransition } from "react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HeatmapCell, HeatmapResponse } from "@/lib/api/network";
 import { fetchHeatmap } from "@/lib/api/network";
 import { formatPercent } from "@/lib/utils/format";
@@ -94,47 +89,47 @@ function hourLabel(hour: number): string {
 function Cell({ cell, bank, hour }: { cell: HeatmapCell | undefined; bank: string; hour: number }) {
   if (!cell) {
     return (
-      <td className="p-px">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <div
-                className="h-9 w-full rounded-[4px] border border-dashed border-hairline"
-                aria-label={`${bank} at ${hourLabel(hour)}: no data`}
-              />
-            }
-          />
-          <TooltipContent>
-            {bank} · {hourLabel(hour)} — no readings
-          </TooltipContent>
-        </Tooltip>
-      </td>
+    <td className="p-px">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <div
+              className="h-9 w-full rounded-[4px] border border-dashed border-hairline"
+              aria-label={`${bank} at ${hourLabel(hour)}: no data`}
+            />
+          }
+        />
+        <TooltipContent>
+          {bank} · {hourLabel(hour)} — no readings
+        </TooltipContent>
+      </Tooltip>
+    </td>
     );
   }
 
   const band = bandFor(cell.success_rate);
   return (
     <td className="p-px">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <div
-              className="h-9 w-full rounded-[4px]"
-              style={{ background: fillFor(cell.success_rate) }}
-              aria-label={`${bank} at ${hourLabel(hour)}: ${formatPercent(cell.success_rate)} success, ${band.label}, ${cell.sample_size} retries`}
-            />
-          }
-        />
-        <TooltipContent className="text-center">
-          <span className="block font-medium">
-            {bank} · {hourLabel(hour)}
-          </span>
-          <span className="block">
-            {formatPercent(cell.success_rate)} over {cell.sample_size} retries
-          </span>
-          <span className="block opacity-70">{band.label}</span>
-        </TooltipContent>
-      </Tooltip>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            className="h-9 w-full rounded-[4px]"
+            style={{ background: fillFor(cell.success_rate) }}
+            aria-label={`${bank} at ${hourLabel(hour)}: ${formatPercent(cell.success_rate)} success, ${band.label}, ${cell.sample_size} retries`}
+          />
+        }
+      />
+      <TooltipContent className="text-center">
+        <span className="block font-medium">
+          {bank} · {hourLabel(hour)}
+        </span>
+        <span className="block">
+          {formatPercent(cell.success_rate)} over {cell.sample_size} retries
+        </span>
+        <span className="block opacity-70">{band.label}</span>
+      </TooltipContent>
+    </Tooltip>
     </td>
   );
 }
@@ -156,123 +151,121 @@ export function NetworkHeatmap({ initial }: NetworkHeatmapProps) {
   useEffect(() => {
     let cancelled = false;
     startLoading(() => {
-      void fetchHeatmap(method ?? undefined)
-        .then((next) => {
-          if (!cancelled) setData(next);
-        })
-        .catch(() => {
-          // Keep the current grid. A blank heatmap on a transient failure reads
-          // as "the network went dark", which is a much stronger claim.
-        });
+    void fetchHeatmap(method ?? undefined)
+      .then((next) => {
+        if (!cancelled) setData(next);
+      })
+      .catch(() => {
+        // Keep the current grid. A blank heatmap on a transient failure reads
+        // as "the network went dark", which is a much stronger claim.
+      });
     });
     return () => {
-      cancelled = true;
+    cancelled = true;
     };
   }, [method]);
 
   const byCell = new Map(data.cells.map((cell) => [`${cell.bank}:${cell.hour}`, cell]));
 
   return (
-    <TooltipProvider delay={120}>
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
-            Success rate by bank and hour
-          </h2>
-          {methods.length > 1 ? (
-            // shadcn Tabs rather than hand-rolled role="tablist" buttons: arrow-key
-            // roving focus, the correct aria wiring and the active indicator all
-            // come with it, and none of the three were here before.
-            <Tabs
-              value={method ?? "all"}
-              onValueChange={(next) => setMethod(next === "all" ? null : String(next))}
-            >
-              <TabsList>
-                {[null, ...methods].map((value) => (
-                  <TabsTrigger key={value ?? "all"} value={value ?? "all"}>
-                    {value === null ? "All" : (METHOD_LABELS[value] ?? value.toUpperCase())}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          ) : null}
-        </div>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          Success rate by bank and hour
+        </h2>
+        {methods.length > 1 ? (
+          // shadcn Tabs rather than hand-rolled role="tablist" buttons: arrow-key
+          // roving focus, the correct aria wiring and the active indicator all
+          // come with it, and none of the three were here before.
+          <Tabs
+            value={method ?? "all"}
+            onValueChange={(next) => setMethod(next === "all" ? null : String(next))}
+          >
+            <TabsList>
+              {[null, ...methods].map((value) => (
+                <TabsTrigger key={value ?? "all"} value={value ?? "all"}>
+                  {value === null ? "All" : (METHOD_LABELS[value] ?? value.toUpperCase())}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        ) : null}
+      </div>
 
-        <div
-          className={cn(
-            "relative overflow-x-auto rounded-card border border-hairline bg-elevated p-3 shadow-card transition-opacity",
-            loading && "opacity-60",
-          )}
-        >
-          {data.is_sparse ? (
-            <p
-              className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-medium tracking-wide text-ink-faint uppercase opacity-50"
-              aria-hidden
-            >
-              Indicative — thin samples
-            </p>
-          ) : null}
+      <div
+        className={cn(
+          "relative overflow-x-auto rounded-card border border-hairline bg-elevated p-3 shadow-card transition-opacity",
+          loading && "opacity-60",
+        )}
+      >
+        {data.is_sparse ? (
+          <p
+            className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-medium tracking-[0.06em] text-ink-faint uppercase opacity-50"
+            aria-hidden
+          >
+            Indicative — thin samples
+          </p>
+        ) : null}
 
-          <table className="w-full min-w-[720px] border-separate border-spacing-0">
-            <caption className="sr-only">
-              Payment success rate for each bank at each hour of the day, IST.
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col" className="w-16" />
+        <table className="w-full min-w-[720px] border-separate border-spacing-0">
+          <caption className="sr-only">
+            Payment success rate for each bank at each hour of the day, IST.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col" className="w-16" />
+              {data.hours.map((hour) => (
+                <th
+                  key={hour}
+                  scope="col"
+                  className="pb-1 text-center font-mono text-[9px] font-normal text-ink-faint"
+                >
+                  {/* Every third hour, so the axis stays readable at this density. */}
+                  {hour % 3 === 0 ? hour : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.banks.map((bank) => (
+              <tr key={bank}>
+                <th
+                  scope="row"
+                  className="pr-2 text-right font-mono text-[10px] font-normal whitespace-nowrap text-ink-muted"
+                >
+                  {bank}
+                </th>
                 {data.hours.map((hour) => (
-                  <th
+                  <Cell
                     key={hour}
-                    scope="col"
-                    className="pb-1 text-center font-mono text-[9px] font-normal text-ink-faint"
-                  >
-                    {/* Every third hour, so the axis stays readable at this density. */}
-                    {hour % 3 === 0 ? hour : ""}
-                  </th>
+                    cell={byCell.get(`${bank}:${hour}`)}
+                    bank={bank}
+                    hour={hour}
+                  />
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {data.banks.map((bank) => (
-                <tr key={bank}>
-                  <th
-                    scope="row"
-                    className="pr-2 text-right font-mono text-[10px] font-normal whitespace-nowrap text-ink-muted"
-                  >
-                    {bank}
-                  </th>
-                  {data.hours.map((hour) => (
-                    <Cell
-                      key={hour}
-                      cell={byCell.get(`${bank}:${hour}`)}
-                      bank={bank}
-                      hour={hour}
-                    />
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-ink-faint">
-          {BANDS.map((band) => (
-            <span key={band.label} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="size-2.5 rounded-[2px]"
-                style={{ background: `color-mix(in oklch, var(${band.token}) 70%, var(--bg-subtle))` }}
-              />
-              {band.label} <span className="opacity-70">({band.hint})</span>
-            </span>
-          ))}
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-2.5 rounded-[2px] border border-dashed border-hairline" />
-            No readings
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-ink-faint">
+        {BANDS.map((band) => (
+          <span key={band.label} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: `color-mix(in oklch, var(${band.token}) 70%, var(--bg-subtle))` }}
+            />
+            {band.label} <span className="opacity-70">({band.hint})</span>
           </span>
-          <span className="ml-auto">Hours are IST.</span>
-        </div>
-      </section>
-    </TooltipProvider>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-[2px] border border-dashed border-hairline" />
+          No readings
+        </span>
+        <span className="ml-auto">Hours are IST.</span>
+      </div>
+    </section>
   );
 }

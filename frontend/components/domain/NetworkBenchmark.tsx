@@ -16,6 +16,7 @@
 import { Info, Users } from "lucide-react";
 
 import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BenchmarkResponse } from "@/lib/api/network";
 import { formatPercent } from "@/lib/utils/format";
 
@@ -83,13 +84,21 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
               { at: median, label: "Median" },
               { at: top, label: "Top decile" },
             ].map((mark) => (
-              <span
-                key={mark.label}
-                className="absolute inset-y-[-3px] w-px bg-ink-faint"
-                style={{ left: `${Math.min(100, Math.max(0, mark.at * 100))}%` }}
-                title={`${mark.label}: ${formatPercent(mark.at)}`}
-                aria-hidden
-              />
+              <Tooltip key={mark.label}>
+                <TooltipTrigger
+                  render={
+                    <span
+                      tabIndex={0}
+                      className="absolute inset-y-[-4px] w-px bg-ink-faint"
+                      style={{ left: `${Math.min(100, Math.max(0, mark.at * 100))}%` }}
+                      aria-label={`${mark.label}: ${formatPercent(mark.at)}`}
+                    />
+                  }
+                />
+                <TooltipContent>
+                  {mark.label}: {formatPercent(mark.at)}
+                </TooltipContent>
+              </Tooltip>
             ))}
             <span
               className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-base bg-brand"
@@ -147,7 +156,7 @@ export function NetworkBenchmark({ data }: { data: BenchmarkResponse }) {
       </div>
 
       <div className="mt-6 border-t border-hairline pt-4">
-        <h3 className="text-[10px] font-medium tracking-wide text-ink-faint uppercase">
+        <h3 className="text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
           Insights from the Razorpay network
         </h3>
         <ul className="mt-2 space-y-1.5">

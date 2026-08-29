@@ -81,7 +81,7 @@ export function StepResultCard({
         </motion.span>
         <span
           className={cn(
-            "font-mono text-xs font-medium tracking-wider uppercase",
+            "font-mono text-xs font-medium tracking-[0.06em] uppercase",
             STATUS_COLORS[status],
           )}
         >

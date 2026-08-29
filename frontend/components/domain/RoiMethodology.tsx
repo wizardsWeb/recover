@@ -63,7 +63,7 @@ export function RoiMethodology({ note, stats }: RoiMethodologyProps) {
           <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">{note}</p>
 
           <div className="mt-4">
-            <h3 className="text-[10px] font-medium tracking-wide text-ink-faint uppercase">
+            <h3 className="text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
               The control group
             </h3>
             <div className="mt-1">

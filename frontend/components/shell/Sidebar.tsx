@@ -9,6 +9,7 @@ import { FlaskConical, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-re
 import { NAV_ITEMS, isActive } from "@/components/shell/nav";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { PersonAvatar } from "@/components/ui/PersonAvatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HOVER_NUDGE, SPRING_NUDGE } from "@/lib/motion";
 import { cn } from "@/lib/utils/cn";
 
@@ -113,30 +114,49 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
-            <MotionLink
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              title={collapsed ? label : undefined}
-              // No nudge on the icon-only rail: a 3px shift inside a 64px
-              // column moves the icon off its own optical centre, which reads
-              // as misalignment rather than as feedback.
-              whileHover={prefersReducedMotion || collapsed ? undefined : HOVER_NUDGE}
-              transition={SPRING_NUDGE}
-              className={cn(
-                // The 3px left rule is drawn as a transparent border on every
-                // item so the label never shifts when the active one gains it.
-                "group flex items-center gap-3 rounded-md border-l-[3px] border-transparent py-2 text-sm",
-                "transition-[background-color,color] duration-150 ease-out",
-                collapsed ? "justify-center px-0" : "justify-center px-0 lg:justify-start lg:px-3",
-                active
-                  ? "border-l-brand bg-sidebar-active font-medium text-sidebar-fg"
-                  : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
-              )}
-            >
-              <Icon className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />
-              {!collapsed && <span className="hidden truncate lg:inline">{label}</span>}
-            </MotionLink>
+            // The label is a `Tooltip` rather than a `title`, and only on the
+            // collapsed rail — when the label is visible beside the icon a
+            // tooltip repeating it is noise. `aria-label` carries the
+            // accessible name in both states, because the visible label is
+            // hidden by a media query rather than removed from the DOM, and a
+            // tooltip is not an accessible name.
+            <Tooltip key={href}>
+              <TooltipTrigger
+                render={
+                  <MotionLink
+                    href={href}
+                    aria-label={label}
+                    aria-current={active ? "page" : undefined}
+                    // No nudge on the icon-only rail: a 3px shift inside a 64px
+                    // column moves the icon off its own optical centre, which
+                    // reads as misalignment rather than as feedback.
+                    whileHover={prefersReducedMotion || collapsed ? undefined : HOVER_NUDGE}
+                    transition={SPRING_NUDGE}
+                    className={cn(
+                      // The 3px left rule is drawn as a transparent border on
+                      // every item so the label never shifts when the active
+                      // one gains it.
+                      "group flex items-center gap-3 rounded-md border-l-[3px] border-transparent py-2 text-sm",
+                      "transition-[background-color,color] duration-150 ease-out",
+                      collapsed
+                        ? "justify-center px-0"
+                        : "justify-center px-0 lg:justify-start lg:px-3",
+                      active
+                        ? "border-l-brand bg-sidebar-active font-medium text-sidebar-fg"
+                        : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
+                    )}
+                  />
+                }
+              >
+                <Icon className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />
+                {!collapsed && (
+                  <span aria-hidden className="hidden truncate lg:inline">
+                    {label}
+                  </span>
+                )}
+              </TooltipTrigger>
+              {collapsed ? <TooltipContent side="right">{label}</TooltipContent> : null}
+            </Tooltip>
           );
         })}
       </nav>
@@ -148,19 +168,32 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
               Development
             </p>
           )}
-          <MotionLink
-            href="/app/dev/simulator"
-            title={collapsed ? "Simulator" : undefined}
-            whileHover={prefersReducedMotion || collapsed ? undefined : HOVER_NUDGE}
-            transition={SPRING_NUDGE}
-            className={cn(
-              "flex items-center gap-3 rounded-md py-2 text-sm text-sidebar-muted transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-fg",
-              collapsed ? "justify-center px-0" : "justify-center px-0 lg:justify-start lg:px-3",
-            )}
-          >
-            <FlaskConical className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />
-            {!collapsed && <span className="hidden lg:inline">Simulator</span>}
-          </MotionLink>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <MotionLink
+                  href="/app/dev/simulator"
+                  aria-label="Simulator"
+                  whileHover={prefersReducedMotion || collapsed ? undefined : HOVER_NUDGE}
+                  transition={SPRING_NUDGE}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md py-2 text-sm text-sidebar-muted transition-colors duration-150 hover:bg-sidebar-hover hover:text-sidebar-fg",
+                    collapsed
+                      ? "justify-center px-0"
+                      : "justify-center px-0 lg:justify-start lg:px-3",
+                  )}
+                />
+              }
+            >
+              <FlaskConical className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />
+              {!collapsed && (
+                <span aria-hidden className="hidden lg:inline">
+                  Simulator
+                </span>
+              )}
+            </TooltipTrigger>
+            {collapsed ? <TooltipContent side="right">Simulator</TooltipContent> : null}
+          </Tooltip>
         </div>
       )}
 

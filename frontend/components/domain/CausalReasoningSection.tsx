@@ -60,7 +60,7 @@ export function CausalReasoningSection({ caseId }: { caseId: string }) {
 
   return (
     <section className="mt-6">
-      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold tracking-wider text-ink-muted uppercase">
+      <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
         <Network size={14} aria-hidden />
         Causal Reasoning
       </h2>

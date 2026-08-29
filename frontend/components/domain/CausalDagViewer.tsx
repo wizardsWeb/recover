@@ -202,7 +202,7 @@ function PosteriorPanel({ dag }: { dag: CaseDag }) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-[10px] font-medium tracking-wide text-ink-faint uppercase">
+      <h3 className="text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
         What else it could be
       </h3>
       <ul className="space-y-1.5">
@@ -277,7 +277,7 @@ export function CausalDagViewer({ dag }: { dag: CaseDag }) {
       <div className="space-y-4">
         {traversal ? (
           <div className="rounded-lg border border-hairline p-3">
-            <div className="text-[10px] tracking-wide text-ink-faint uppercase">Diagnosed</div>
+            <div className="text-[10px] tracking-[0.06em] text-ink-faint uppercase">Diagnosed</div>
             <div className="mt-0.5 text-sm font-medium text-ink">
               {dag.nodes.find((node) => node.node_id === traversal.root_cause)?.label ??
                 traversal.root_cause}

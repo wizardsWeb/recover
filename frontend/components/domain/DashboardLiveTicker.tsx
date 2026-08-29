@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { KpiCard, type KpiCardProps } from "@/components/domain/KpiCard";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { StaggerList } from "@/components/ui/StaggerList";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchOverview, type Overview } from "@/lib/api/cases";
 import { useRealtimeCases, type RealtimeStatus } from "@/lib/hooks/useRealtimeCases";
 
@@ -57,18 +58,24 @@ const TILES: Array<{
 function LiveDot({ status }: { status: RealtimeStatus }) {
   const live = status === "live";
   return (
-    <span
-      className="inline-flex items-center gap-1.5 text-xs"
-      title={live ? "Live — updating as cases change" : "Not connected — showing the last reading"}
-    >
-      <span
-        aria-hidden
-        className={`inline-block size-2 rounded-full ${
-          live ? "animate-pulse bg-success" : "bg-ink-faint"
-        }`}
-      />
-      <span className="sr-only">{live ? "Live updates connected" : "Live updates disconnected"}</span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={<span tabIndex={0} className="inline-flex items-center gap-1.5 rounded-full" />}
+      >
+        <span
+          aria-hidden
+          className={`inline-block size-2 rounded-full ${
+            live ? "animate-pulse bg-success" : "bg-ink-faint"
+          }`}
+        />
+        <span className="sr-only">
+          {live ? "Live updates connected" : "Live updates disconnected"}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {live ? "Live — updating as cases change" : "Not connected — showing the last reading"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
