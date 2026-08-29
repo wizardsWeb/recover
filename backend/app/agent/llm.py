@@ -64,7 +64,14 @@ logger = get_logger(__name__)
 
 #: Free-tier flash model. Named here rather than in settings because the prompt
 #: templates are written against this model's structured-output behaviour.
-DEFAULT_MODEL = "gemini-2.0-flash-exp"
+#:
+#: Pinned to a stable release, not an alias. ``gemini-2.0-flash-exp`` used to be
+#: here and was retired, which every call then met as a 404 — and because the
+#: error path returns the fallback, nothing looked broken. The app went on
+#: serving canned copy in place of generated text, indefinitely and quietly.
+#: ``gemini-flash-latest`` would have the same failure shape on the day its
+#: contents change under a rehearsed demo, so the version stays explicit.
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 

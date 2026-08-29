@@ -49,3 +49,9 @@ supabase/.temp/
 
 # Upstream clone of the apple-design skill (has its own .git)
 .apple-design-skill/
+
+# ---------- Demo seeding ----------
+# Written by backend/scripts/prepare_demo.py. Regenerable, and it carries the
+# demo account password in plaintext — the Playwright runner reads it from the
+# working tree rather than from git.
+backend/scripts/demo_state.json
