@@ -86,6 +86,21 @@ class Settings(BaseSettings):
     #: off the account id in the payload instead.
     RAZORPAY_WEBHOOK_MERCHANT_ID: str = ""
 
+    #: The real Razorpay test-mode subscription and customer that scenario S1
+    #: should fire against, created by hand in the dashboard.
+    #:
+    #: Empty falls back to the scripted fixture ids, which is what keeps the six
+    #: scenarios runnable with no Razorpay account. Set them and S1 stops being a
+    #: simulation: the subscription adapter reads a real subscription's pending
+    #: state, and a real ``subscription.charged`` webhook can be matched back to
+    #: the case it settled.
+    #:
+    #: These are ids, not credentials — they identify objects, they do not
+    #: authorise anything — which is why they live beside the keys rather than in
+    #: them.
+    RAZORPAY_DEMO_SUBSCRIPTION_ID: str = ""
+    RAZORPAY_DEMO_CUSTOMER_ID: str = ""
+
     @property
     def razorpay_configured(self) -> bool:
         """Whether outbound Razorpay API calls are possible."""

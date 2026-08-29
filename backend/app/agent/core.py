@@ -1087,7 +1087,8 @@ async def _get_or_create_case(
     except Exception as exc:  # noqa: BLE001
         logger.warning("existing_case_lookup_error", error=str(exc), trace_id=trace_id)
 
-    amount = extract_amount_at_risk(event.get("payload") or {}, event["event_type"])
+    payload = event.get("payload") or {}
+    amount = extract_amount_at_risk(payload, event["event_type"])
     now = datetime.now(UTC).isoformat()
     new_case = {
         "merchant_id": merchant_id,
@@ -1099,6 +1100,10 @@ async def _get_or_create_case(
         "opened_at": now,
         "current_step": StepName.DETECT.value,
         "trigger_event_id": event["id"],
+        # The provider ids this case will need *after* the pass that opened it.
+        # Everything else stays on the trigger event: a second copy of the whole
+        # payload is a second thing that can drift from the first.
+        "metadata": _durable_identifiers(payload),
         "created_at": now,
         "updated_at": now,
     }
@@ -1108,6 +1113,34 @@ async def _get_or_create_case(
     except Exception as exc:  # noqa: BLE001
         logger.error("case_creation_error", error=str(exc), trace_id=trace_id)
         return None
+
+
+#: Provider identifiers worth persisting onto the case row.
+#:
+#: `_enrich_case` puts the whole trigger payload on ``case["metadata"]`` for the
+#: duration of a pass, which is why the execute adapters can read
+#: ``subscription_id`` today. But a later webhook has no pass and no payload — it
+#: has a case row — and ``handle_terminal_event`` matches on exactly these. Before
+#: this the stored row carried no metadata at all, so a ``subscription.charged``
+#: could never be matched to the subscription case it settled.
+_DURABLE_ID_KEYS = (
+    "subscription_id",
+    "mandate_id",
+    "invoice_id",
+    "order_id",
+    "plan_id",
+    "payment_id",
+    "cart_id",
+    # Not identifiers, but the instrument the network aggregator reads back off
+    # closed cases — and it reads the row, not the event.
+    "bank",
+    "method",
+)
+
+
+def _durable_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """The subset of a trigger payload that outlives the pass that read it."""
+    return {key: payload[key] for key in _DURABLE_ID_KEYS if payload.get(key) not in (None, "")}
 
 
 async def _resolve_customer_id(

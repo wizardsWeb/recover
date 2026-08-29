@@ -185,8 +185,12 @@ def _fire(
 def _payload_S1() -> dict[str, Any]:
     """The scripted S1 payload, exactly as scenarios.md shows it."""
     return build_subscription_charged_failed_event(
-        customer_external_id="cust_suresh_iyer",
-        subscription_id="sub_zenith_aarav_jee",
+        # Both read from settings, so pointing S1 at a real Razorpay subscription
+        # is an env var rather than an edit here. They must agree with the
+        # persona's own external_id or the webhook receiver cannot match a
+        # settlement back to the case — which is why both come from one place.
+        customer_external_id=fixtures.demo_customer_id(),
+        subscription_id=fixtures.demo_subscription_id(),
         amount_cents=299900,
         failure_reason="insufficient_funds",
         method="upi",

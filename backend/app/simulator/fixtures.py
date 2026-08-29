@@ -20,6 +20,8 @@ Conventions:
 
 from typing import Any
 
+from app.config import get_settings
+
 # ---------------------------------------------------------------------------
 # Merchant slugs used in webhook payloads.
 #
@@ -38,8 +40,27 @@ MERCHANT_SHARMA = "sharma_distributors"
 # S1 — Suresh Iyer (Zenith Learning, subscription)
 # ---------------------------------------------------------------------------
 
+def demo_customer_id() -> str:
+    """Suresh's customer id — the real one when the dashboard has been set up.
+
+    S1 is the only scenario that can be driven by a genuine Razorpay
+    subscription, and doing so requires our customer row and Razorpay's customer
+    to share an ``external_id``: that string is what the webhook receiver looks a
+    settlement up by. Reading it from settings rather than editing this literal
+    means setting up the real demo is an env var, not a code change — and a code
+    change is the kind of thing that gets committed by accident and then breaks
+    every other environment.
+    """
+    return get_settings().RAZORPAY_DEMO_CUSTOMER_ID or "cust_suresh_iyer"
+
+
+def demo_subscription_id() -> str:
+    """Suresh's subscription id. Same reasoning as `demo_customer_id`."""
+    return get_settings().RAZORPAY_DEMO_SUBSCRIPTION_ID or "sub_zenith_aarav_jee"
+
+
 PERSONA_SURESH: dict[str, Any] = {
-    "external_id": "cust_suresh_iyer",
+    "external_id": demo_customer_id(),
     "name": "Suresh Iyer",
     "phone": "+919812345001",
     "email": "suresh.iyer@example.com",
