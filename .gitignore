@@ -72,3 +72,7 @@ docs/demo-with-voiceover.mp4
 docs/voiceover.mp3
 docs/voiceover/segments/
 docs/voiceover/segments-11labs/
+
+# The raw demo capture. 464MB at 2304x1440/60fps — GitHub hard-rejects anything
+# over 100MB, so the video is hosted and linked from the README instead.
+docs/demo-video/*.mp4
