@@ -69,7 +69,7 @@ export function AuthPanel() {
   const image = SCENARIO_IMAGES[scene.key];
 
   return (
-    <div className="relative isolate hidden overflow-hidden bg-ink-900 lg:block">
+    <div className="relative isolate hidden overflow-hidden bg-ink lg:block">
       <AnimatePresence initial={false}>
         <motion.div
           key={scene.key}
@@ -85,33 +85,23 @@ export function AuthPanel() {
             fill
             sizes="50vw"
             className="object-cover"
-            // The panel is the first thing painted on the right half of the
-            // viewport, so the first scene is not lazy. The other two arrive
-            // seven seconds later, which is a lifetime for an image request.
             priority={index === 0}
           />
         </motion.div>
       </AnimatePresence>
 
-      {/* Dark at the foot where the quote sits, clearing towards the top so the
-          photograph survives. It is also what keeps the copy above 4.5:1 on
-          every one of the three images without having to check each.
-
-          The mid stop is pulled down to 30% rather than the default 50%: at the
-          midpoint the scrim is still 55% opaque by the time it reaches the
-          quote, which left the bottom third of every photograph as a solid
-          black band. The copy sits between 55% and 100% opacity, which is where
-          the contrast floor is met — everything above it is now picture. */}
+      {/* A gradient rather than a flat scrim, and pulled low: the quote occupies
+          the bottom third, so that is the only part that has to be dark. Above
+          it the photograph is left alone. */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/55 via-30% to-ink-900/10"
+        className="absolute inset-0 bg-gradient-to-t from-black via-black/55 via-30% to-black/5"
       />
 
-      <div className="relative flex h-full flex-col justify-end p-12">
-        <p className="text-[11px] font-medium tracking-[0.15em] text-sidebar-gold uppercase">
-          Built around three real leaks
-        </p>
-
+      <div className="relative flex h-full flex-col justify-end p-7">
+        {/* The serif at display size, which is where this system puts a
+            statement. It is the same move as the landing page's one serif
+            paragraph, and it is the only thing on this half of the screen. */}
         <AnimatePresence mode="wait">
           <motion.blockquote
             key={scene.key}
@@ -119,22 +109,22 @@ export function AuthPanel() {
             animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.5, delay: 0.2 }}
-            className="mt-5 max-w-md"
+            className="max-w-[34rem]"
           >
-            <p className="font-display text-xl leading-snug font-medium tracking-[-0.01em] text-white">
+            <p className="font-serif text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.05] tracking-[-0.025em] text-white">
               &ldquo;{scene.quote}&rdquo;
             </p>
-            <footer className="mt-4 text-sm text-white/60">
-              <span className="block font-medium text-white/85">{scene.persona}</span>
+            <footer className="mt-5 text-[13px] leading-[1.3] text-white/60">
+              <span className="block text-white/85">{scene.persona}</span>
               {scene.trade}
             </footer>
           </motion.blockquote>
         </AnimatePresence>
 
-        {/* Which scene, and a way to jump. Three dots rather than arrows: the
-            panel is ambient, and a control pair beside a login form implies
-            there is something here you are expected to read. */}
-        <div className="mt-8 flex gap-1.5">
+        {/* Three rules rather than three dots. A dot is a pill and there are no
+            pills here; a 24px rule that thickens when active is the same
+            affordance drawn in the system's own vocabulary. */}
+        <div className="mt-8 flex gap-2">
           {SCENES.map((item, position) => (
             <button
               key={item.key}
@@ -144,8 +134,8 @@ export function AuthPanel() {
               aria-current={position === index}
               className={
                 position === index
-                  ? "h-1 w-8 rounded-none bg-white/80 transition-all"
-                  : "h-1 w-4 rounded-none bg-white/25 transition-all hover:bg-white/50"
+                  ? "h-px w-10 bg-white transition-all"
+                  : "h-px w-6 bg-white/30 transition-all hover:bg-white/60"
               }
             />
           ))}

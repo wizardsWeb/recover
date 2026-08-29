@@ -39,24 +39,26 @@ interface SidebarProps {
 }
 
 /**
- * The navigation rail — dark in both colour modes.
+ * The navigation rail.
  *
- * That is a navigational decision rather than a stylistic one. A rail that
- * inverts with the theme is a second content surface competing with the page;
- * one that stays dark reads as chrome, so the eye stops treating it as
- * something to look at and goes where the work is. Razorpay, Linear and Vercel
- * all land in the same place.
+ * It used to be permanently dark in both colour modes, and that was right for a
+ * product built on elevation and wrong for one built on hairlines: a black
+ * column beside a white page is the loudest object on screen, and nothing in
+ * this system is allowed to be loud. It is paper now, separated from the content
+ * by a single rule — which is the same device every other boundary in the
+ * product uses.
  *
- * Its colours therefore come from `--sidebar-*` rather than from the surface
- * tokens, which is what keeps the light-mode swap from reaching in here.
+ * Its colours still come from `--sidebar-*` rather than from the surface tokens.
+ * That indirection earns its keep even now that the values match: the rail is
+ * the one surface whose ground is a *decision* rather than a consequence, and
+ * keeping its own names means changing that decision stays a one-line edit.
  *
- * Icons are drawn at `strokeWidth={1.5}` rather than Lucide's default 2. At
- * 18px on a dark ground the default reads as heavy and slightly crude; a
- * thinner stroke is the difference between an icon set and a toolbar.
+ * Icons are drawn at `strokeWidth={1.5}` rather than Lucide's default 2. At 18px
+ * beside 400-weight text a 2px stroke is heavier than every glyph next to it,
+ * which makes the icons read as the primary content of the row.
  *
  * The hover nudge is a spring rather than a CSS transition because 3px is a
- * distance a linear ease makes look like a glitch — it arrives and stops. A
- * stiff spring gives it the small overshoot that reads as a physical nudge.
+ * distance a linear ease makes look like a glitch — it arrives and stops.
  */
 export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }: SidebarProps) {
   const pathname = usePathname();
@@ -77,7 +79,7 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col bg-sidebar-bg transition-[width] duration-200 ease-out print:hidden",
+        "flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar-bg transition-[width] duration-200 ease-out print:hidden",
         // Below `lg` the rail is icon-only whatever the stored preference says.
         // Done in CSS rather than by measuring the viewport in JS: a media
         // query cannot be read during SSR, so a JS version renders the wide
@@ -213,7 +215,7 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
           as a nav item. */}
       {!collapsed && (
         <div className="hidden px-4 pt-2 lg:block">
-          <RazorpayWordmark onDark className="text-[11px]" />
+          <RazorpayWordmark className="text-[11px]" />
         </div>
       )}
 
@@ -240,7 +242,7 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
                 </span>
               </span>
               <div className="hidden shrink-0 items-center lg:flex">
-                <ThemeToggle className="size-7 text-sidebar-muted hover:bg-sidebar-active hover:text-sidebar-fg dark:hover:bg-sidebar-active" />
+                <ThemeToggle className="size-7 text-sidebar-muted hover:bg-sidebar-active hover:text-sidebar-fg" />
                 <Link
                   href="/app/settings"
                   aria-label="Settings"

@@ -1,25 +1,35 @@
+import Link from "next/link";
+
 import { AuthPanel } from "@/components/auth/AuthPanel";
-import { Wordmark } from "@/components/brand/Wordmark";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
- * Sign-in, sign-up and onboarding: form on the left, context on the right.
+ * Sign-in, sign-up and onboarding: form on the left, one plate on the right.
  *
- * The split collapses below `lg` and the panel is dropped rather than stacked.
- * A photograph above a login form on a phone pushes the password field below
- * the fold to show a picture nobody came for.
+ * `ground-light` for the same reason the landing page has it — these are public
+ * pages with a decided ground, and there is no theme toggle here either. A
+ * reader arriving from the landing page should not find a different product.
+ *
+ * The wordmark is the same three lines as the landing chrome, and it is the only
+ * chrome: no header bar, no rule under it, nothing to separate it from the form
+ * below. The split itself is the structure.
  */
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-2">
-      <div className="flex flex-col bg-base">
-        <header className="flex h-14 items-center justify-between px-6">
-          <Wordmark />
-          <ThemeToggle />
-        </header>
+    <div className="ground-light grid min-h-dvh bg-paper text-ink lg:grid-cols-2">
+      <div className="flex flex-col px-5 sm:px-7">
+        <div className="pt-4 text-[13px] leading-[1.15]">
+          <Link href="/" className="block">
+            <span className="block">Recover</span>
+            <span className="block text-ink-muted">Revenue Recovery</span>
+            <span className="block text-ink-muted">for Razorpay</span>
+          </Link>
+        </div>
 
-        <main className="flex flex-1 items-center justify-center px-6 pb-20">
-          <div className="w-full max-w-sm">{children}</div>
+        {/* The form sits at the optical centre of its column rather than the
+            geometric one — `pb-24` pulls it up, because a form centred against
+            a tall viewport reads as sitting low. */}
+        <main className="flex flex-1 items-center pb-24">
+          <div className="w-full max-w-[26rem]">{children}</div>
         </main>
       </div>
 

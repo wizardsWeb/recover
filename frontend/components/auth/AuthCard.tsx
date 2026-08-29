@@ -15,21 +15,28 @@ interface AuthCardProps {
  * one footer line. Keeping it in a single place is what stops the three pages
  * from drifting apart a pixel at a time.
  */
+/**
+ * The frame shared by sign-in, sign-up and onboarding.
+ *
+ * No longer a card. A bordered panel floating on a white page was the one
+ * container left in the product, and in a system built on hairlines a box around
+ * a form is a box around nothing — the column already bounds it. What remains is
+ * a title, a line of meta, the fields, and a rule above the footer link.
+ */
 export function AuthCard({ title, description, children, footer, className }: AuthCardProps) {
   return (
-    <div className={cn("rounded-none border border-hairline bg-elevated p-8 shadow-card", className)}>
-      <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">{title}</h1>
-      {description ? (
-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{description}</p>
-      ) : null}
+    <div className={cn(className)}>
+      <h1 className="text-[clamp(2rem,4vw,2.75rem)] leading-[0.95] tracking-[-0.035em] text-ink">
+        {title}
+      </h1>
+      {description ? <p className="type-meta mt-3 max-w-[34ch]">{description}</p> : null}
 
-      <div className="mt-6">{children}</div>
+      <div className="mt-10">{children}</div>
 
       {footer ? (
-        <>
-          <div className="mt-6 h-px bg-hairline" />
-          <div className="mt-4 text-sm text-ink-muted">{footer}</div>
-        </>
+        <div className="mt-10 border-t border-hairline pt-4 text-[13px] text-ink-muted">
+          {footer}
+        </div>
       ) : null}
     </div>
   );

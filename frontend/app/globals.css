@@ -213,7 +213,13 @@
   --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  /* `font-display` stays on the grotesque, which is where the reference puts
+     its headings — the serif is reserved for statement paragraphs and 13px meta
+     labels, and it is asked for by name. Aliasing `font-display` to the serif
+     would have quietly moved every dashboard page title and every KPI figure
+     into it, which inverts the intended hierarchy: a number set in a
+     high-contrast serif reads as a pull quote, not as a measurement. */
+  --font-display: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 
   /* ---- Surfaces --------------------------------------------------------- */
