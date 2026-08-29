@@ -47,11 +47,13 @@ cannot reach.
 ## Results
 
 Over 1,000 simulated cases across all four playbooks, against a rule-based
-baseline deciding the same customers: **₹14.8L gross recovered, ₹9.2L
-incremental**, a 35.2% settled recovery rate, and **zero** compliance violations
-— reported beside the count of sends the guardrail blocked, because a zero with
-no denominator is not a claim anyone should accept. Bank downtime is detected in
-about 91 seconds.
+baseline deciding the same customers: **₹64,47,527 gross recovered, ₹37,13,501
+incremental** — 57.6% of gross, the rest being money that would have arrived
+without the agent. A 37.2% settled recovery rate, 36% against the baseline's 20%
+in the final window, and **zero** compliance violations — reported beside the 110
+sends the guardrail blocked, because a zero with no denominator is not a claim
+anyone should accept. Opt-outs are honoured in 6.2 seconds on average, and the
+whole thing costs ₹0.06 per ₹100 recovered.
 
 Those cases are synthetic. The machinery is not: webhooks are HMAC-verified,
 payment links are genuine `rzp.io` URLs, and a customer paying one closes its

@@ -14,7 +14,7 @@ what would have happened anyway.
 | | |
 | --- | --- |
 | **Live app** | https://recover-aa-prod-frontend.ashybay-6728b979.eastasia.azurecontainerapps.io |
-| **Demo video** | **▶ [Watch the 7-minute walkthrough](ADD_YOUR_VIDEO_LINK_HERE)** · narrated |
+| **Demo video** | **▶ [Watch the 7-minute walkthrough](https://youtu.be/SgP3Q4Qy_IY)** · narrated |
 | **Sign in** | `demo.kajal@recoverapp.dev` · `demo.zenith@recoverapp.dev` · `demo.sharma@recoverapp.dev` — password `DemoRecover2026!` |
 
 ---
@@ -40,7 +40,7 @@ what would have happened anyway.
 
 ## 1. The demo
 
-**Watch:** [the 7-minute walkthrough](ADD_YOUR_VIDEO_LINK_HERE) — narrated, covering all
+**Watch:** [the 7-minute walkthrough](https://youtu.be/SgP3Q4Qy_IY) — narrated, covering all
 three merchants and every feature below.
 
 **Or drive it yourself** at the live URL with any of the three logins above. Each is a
@@ -125,23 +125,29 @@ is a position Razorpay holds.
 
 ## 5. Results
 
-From the batch run visible at `/app/batch` in the live app — 200 cases, both policies
-deciding the *same* customers:
+From the batch run visible at `/app/batch` in the live app — **1,000 cases across four
+playbooks**, with the bandit and a fixed rule deciding the *same* customers:
 
 | | |
 | --- | --- |
-| Settled recovery rate | **36.0%** bandit vs **26.0%** fixed rule |
-| Bandit overtakes baseline | case **50** |
-| Gross recovered | **₹12,40,320** |
-| Incremental (vs holdout) | **₹8,85,477** — 71% of gross |
-| Compliance violations | **0**, against 15 retries and 17 messages the guardrail blocked |
-| Opt-outs honoured | 2 of 2 |
-| Escalated to a human | 4 |
+| Recovery rate, final window | **36%** bandit vs **20%** fixed rule |
+| Settled recovery rate | **37.2%** — 35.1% including what exploration cost to get there |
+| Revenue at risk | ₹2,21,43,273 |
+| Gross recovered | **₹64,47,527** |
+| Incremental vs holdout | **₹37,13,501** — 57.6% of gross. The rest would have arrived anyway |
+| RBI violations | **0**, with 110 sends stopped before they could reach the data |
+| Opt-outs honoured | **36**, within 6.2 seconds on average |
+| Cost of recovery | **₹0.06** spent per ₹100 recovered |
 
-The bandit *loses* early in that curve, and the dip is the point: exploration costs real
-recoveries, and a policy that started ahead would be one that never had to learn.
+Two of those are worth pausing on.
 
----
+**The bandit loses early**, and the dip in the curve is the point: exploration costs real
+recoveries, and a policy that started ahead would be one that never had to learn. It
+crosses the baseline around case 550 and holds.
+
+**Zero violations is reported beside 110 blocked sends.** A zero with no denominator is
+not a claim anyone should accept — the 110 is what proves the guardrail was actually
+running.
 
 ## 6. Screenshots
 
@@ -175,6 +181,14 @@ The remaining steps — detect, uplift check, execute, listen — are in
 [`cases2`–`cases7`](docs/screenshots/), which walk one case top to bottom.
 
 **The evidence**
+
+![Batch](docs/screenshots/batch.png)
+
+A contextual bandit against a fixed rule, over the same thousand customers. The bandit
+trails early — that dip is exploration being paid for — then crosses the baseline around
+case 550 and settles at **36% against 20%**. Underneath: ₹64,47,527 gross, ₹37,13,501
+incremental, **zero RBI violations against 110 blocked sends**, and 36 opt-outs honoured
+in an average of 6.2 seconds.
 
 | | |
 | --- | --- |
