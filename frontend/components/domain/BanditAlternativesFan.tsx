@@ -1,7 +1,6 @@
 "use client";
 
-import { useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 import type { BanditAlternative } from "@/lib/api/cases";
 
@@ -31,24 +30,19 @@ interface Props {
   contextBucket: string | null;
 }
 
-/** Mount animation: bars grow from zero, staggered down the list. */
-const STAGGER_MS = 40;
+/**
+ * Seconds added per bar. The fan reads top to bottom, and 50ms is fast enough
+ * that six arms finish inside a third of a second — long enough to see the
+ * ranking sweep out, short enough that nobody waits for it.
+ */
+const STAGGER = 0.05;
 
 function armLabel(arm: string): string {
   return arm.replace(/_/g, " ");
 }
 
 export function BanditAlternativesFan({ alternatives, banditMode, contextBucket }: Props) {
-  const [mounted, setMounted] = useState(false);
   const prefersReducedMotion = useReducedMotion();
-
-  // One frame after mount, so the transition has a zero-width start state to
-  // animate away from. Setting the final width on the first paint would render
-  // the bars complete with no motion at all.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
 
   if (alternatives.length === 0) return null;
 
@@ -78,23 +72,22 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
                 {armLabel(alt.arm_name)}
               </span>
 
+              {/* Framer drives the width rather than a CSS transition off a
+                  mounted flag: `initial` gives it the zero-width start state
+                  without a render pass whose only job is to be replaced one
+                  frame later. */}
               <div className="h-2 flex-1 overflow-hidden rounded-4xl bg-inset">
-                <div
+                <motion.div
                   className={`h-full min-w-[2px] rounded-4xl ${
-                    prefersReducedMotion ? "" : "transition-[width] duration-300 ease-out"
-                  } ${
-                    alt.chosen
-                      ? "bg-brand"
-                      : alt.is_cold
-                        ? "bg-hairline"
-                        : "bg-ink-faint/40"
+                    alt.chosen ? "bg-brand" : alt.is_cold ? "bg-hairline" : "bg-ink-faint/40"
                   }`}
-                  style={{
-                    width: mounted || prefersReducedMotion ? `${pct}%` : "0%",
-                    transitionDelay: prefersReducedMotion
-                      ? undefined
-                      : `${index * STAGGER_MS}ms`,
-                  }}
+                  initial={{ width: prefersReducedMotion ? `${pct}%` : 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={
+                    prefersReducedMotion
+                      ? { duration: 0 }
+                      : { duration: 0.4, ease: "easeOut", delay: index * STAGGER }
+                  }
                 />
               </div>
 

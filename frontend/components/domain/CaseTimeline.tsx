@@ -2,6 +2,7 @@
 
 import {
   BookOpen,
+  Check,
   Cpu,
   Ear,
   FileCheck,
@@ -10,15 +11,26 @@ import {
   Shield,
   Sparkles,
   TrendingUp,
+  X,
   Zap,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan";
 import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
 import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
 import { StaggeredItem } from "@/components/ui/StaggeredItem";
+import { SPRING } from "@/lib/motion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { STEP_ORDER } from "@/lib/domain/case-steps";
 import type {
   AgentDecision,
@@ -276,9 +288,17 @@ function DiagnoseDetail({ diagnosis }: { diagnosis: Record<string, unknown> }) {
 
   return (
     <div className="space-y-3">
+      {/* The gold moment, and the only one in the product.
+          Gold means "this is the answer the agent found". It is not a warning,
+          not a premium tier and not a highlight — if it meant any of those too
+          it would mean none of them. Amber is a caution and lives on
+          --warning; this is saffron-bronze and lives here. */}
       <div>
-        <div className="text-sm font-medium text-ink">{rootCauseLabel(rootCause)}</div>
-        <div className="font-mono text-[10px] text-ink-faint">{rootCause}</div>
+        <p className="inline-flex items-center gap-2 rounded-4xl border border-gold bg-gold-light px-3 py-1 text-sm font-medium text-gold">
+          <GitBranch size={13} aria-hidden />
+          {rootCauseLabel(rootCause)}
+        </p>
+        <p className="mt-1.5 font-mono text-[10px] text-ink-faint">{rootCause}</p>
       </div>
 
       <ConfidenceBar probability={probability} />
@@ -321,6 +341,60 @@ function MetaBadge({ label }: { label: string }) {
 }
 
 /**
+ * Three dots, then the message.
+ *
+ * The bubble is the one place in the trail where the agent *speaks*, and the
+ * beat before it arrives is what makes the reader look at it rather than scan
+ * past it. It costs 700ms, and only when a merchant has already chosen to open
+ * this step — nothing is being withheld from anyone who did not ask.
+ *
+ * Held off entirely under reduced motion: a deliberate delay before content
+ * appears is precisely the kind of thing that setting is asking us not to do,
+ * and the message is information rather than decoration.
+ */
+function TypingBubble({ children }: { children: ReactNode }) {
+  const prefersReducedMotion = useReducedMotion();
+  const [sent, setSent] = useState(prefersReducedMotion);
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+    const timer = setTimeout(() => setSent(true), 700);
+    return () => clearTimeout(timer);
+  }, [prefersReducedMotion]);
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {sent ? (
+        <motion.div
+          key="bubble"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={prefersReducedMotion ? { duration: 0 } : SPRING}
+        >
+          {children}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="typing"
+          exit={{ opacity: 0 }}
+          aria-hidden
+          className="flex w-fit gap-1 rounded-[0_12px_12px_12px] bg-whatsapp-bubble px-3.5 py-3"
+        >
+          {[0, 1, 2].map((dot) => (
+            <motion.span
+              key={dot}
+              className="size-1.5 rounded-full bg-whatsapp-ink/40"
+              animate={{ y: [0, -4, 0] }}
+              transition={{ duration: 0.6, repeat: Infinity, delay: dot * 0.15 }}
+            />
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/**
  * The message as the customer would have seen it.
  *
  * The "Simulated" label is not decoration. Every adapter in Phase 5 writes an
@@ -344,14 +418,19 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative max-w-md rounded-lg rounded-tr-sm bg-whatsapp-bubble px-3 py-2">
-        <span className="absolute top-1.5 right-2 text-[9px] font-medium text-warning">
-          Simulated
-        </span>
-        <p className="pr-14 text-sm whitespace-pre-wrap text-whatsapp-ink">
-          {body}
-        </p>
-      </div>
+      <TypingBubble>
+        {/* WhatsApp's own corner geometry — square where the tail attaches,
+            12px everywhere else. The shape is the cue: a merchant should know
+            which channel this went out on before reading a word of it. */}
+        <div className="relative max-w-[280px] rounded-[0_12px_12px_12px] bg-whatsapp-bubble px-3.5 py-2.5">
+          <span className="absolute top-1.5 right-2 text-[9px] font-medium text-warning">
+            Simulated
+          </span>
+          <p className="pr-14 text-sm leading-relaxed whitespace-pre-wrap text-whatsapp-ink">
+            {body}
+          </p>
+        </div>
+      </TypingBubble>
 
       <div className="flex flex-wrap gap-1.5">
         {tone ? <MetaBadge label={humanise(tone)} /> : null}
@@ -360,6 +439,62 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
       </div>
 
       {reasoning ? <p className="text-xs text-ink-faint italic">{reasoning}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The compliance checks, as a table.
+ *
+ * A table rather than a list of ticks because this is the part of the trail an
+ * auditor reads, and an auditor reads down a column. Three checks in a row of
+ * inline text is fine to glance at and impossible to scan when there are eight
+ * of them and one has a reason attached.
+ *
+ * The pass mark is an icon *and* a colour. Colour alone would leave a
+ * red/green-blind reader with two identical rows, on the one screen in the
+ * product where the difference is whether a message was legally allowed to go.
+ */
+function GuardrailChecks({ checks }: { checks: GuardrailCheck[] }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-hairline bg-elevated">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 px-3 text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
+              Check
+            </TableHead>
+            <TableHead className="h-8 w-16 px-3 text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
+              Result
+            </TableHead>
+            <TableHead className="h-8 px-3 text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
+              Reason
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {checks.map((check) => (
+            <TableRow key={check.check_name} className="border-hairline hover:bg-transparent">
+              <TableCell className="px-3 py-1.5 font-mono text-[11px] text-ink-muted">
+                {check.check_name}
+              </TableCell>
+              <TableCell className="px-3 py-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                    check.passed ? "text-success" : "text-danger"
+                  }`}
+                >
+                  {check.passed ? <Check size={12} aria-hidden /> : <X size={12} aria-hidden />}
+                  {check.passed ? "Pass" : "Block"}
+                </span>
+              </TableCell>
+              <TableCell className="px-3 py-1.5 text-[11px] whitespace-normal text-ink-faint">
+                {check.reason ?? "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -496,13 +631,16 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
 
         return (
           <StaggeredItem key={stepName} index={index} className="flex gap-3">
+            {/* The rail. 32px markers on a 2px rule: at 28px and a hairline the
+                icons read as bullets in a list rather than as stations on a
+                line, which is the whole distinction the timeline is drawing. */}
             <div className="flex flex-col items-center">
               <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${RAIL_STYLES[status]}`}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full ${RAIL_STYLES[status]}`}
               >
                 {STEP_ICONS[stepName]}
               </div>
-              {!isLast ? <div className="my-1 w-px flex-1 bg-hairline" /> : null}
+              {!isLast ? <div className="my-1 w-0.5 flex-1 rounded-full bg-hairline" /> : null}
             </div>
 
             <div className="flex-1 pb-2">
@@ -526,19 +664,7 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
                 ) : null}
 
                 {stepName === "guardrail" && checks ? (
-                  <div className="space-y-1">
-                    {checks.map((check) => (
-                      <div key={check.check_name} className="flex items-start gap-2 text-xs">
-                        <span className={check.passed ? "text-success" : "text-danger"}>
-                          {check.passed ? "✓" : "✗"}
-                        </span>
-                        <span className="font-mono text-ink-muted">{check.check_name}</span>
-                        {check.reason ? (
-                          <span className="text-ink-faint">— {check.reason}</span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
+                  <GuardrailChecks checks={checks} />
                 ) : null}
 
                 {stepName === "execute" && messageAttempt ? (
