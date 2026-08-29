@@ -121,7 +121,13 @@
   --sidebar-fg: var(--ink-50);
   --sidebar-muted: #9c9cb0;
   --sidebar-border: #262633;
-  --sidebar-active: color-mix(in srgb, var(--rupee) 18%, transparent);
+  /* The active row's fill is white at 6%, not a tint of the brand. On a
+     near-black rail a blue wash and a blue left-rule are the same signal drawn
+     twice; the rule carries the state, and the fill only has to lift the row
+     off the ground. Hover is the same idea at two thirds the strength, so the
+     two states are distinguishable without either shouting. */
+  --sidebar-active: rgb(255 255 255 / 0.06);
+  --sidebar-hover: rgb(255 255 255 / 0.04);
   --sidebar-gold: #f0b457;
 
   /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
@@ -292,6 +298,7 @@
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-gold: var(--sidebar-gold);
 
   /* WhatsApp's own brand green, for the one bubble that should look like an

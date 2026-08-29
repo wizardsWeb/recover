@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
@@ -13,13 +12,15 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label="Breadcrumb">
-      <ol className="flex items-center gap-1.5 text-sm">
+      <ol className="flex items-center gap-2 text-sm text-ink-muted">
         {trail.map((item, index) => {
           const last = index === trail.length - 1;
           return (
             <Fragment key={item.href}>
               {index > 0 && (
-                <ChevronRight className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
+                <span className="shrink-0 text-ink-faint" aria-hidden>
+                  /
+                </span>
               )}
               <li>
                 {last ? (

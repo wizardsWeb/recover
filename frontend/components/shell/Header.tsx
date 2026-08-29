@@ -2,6 +2,7 @@ import { Bell } from "lucide-react";
 
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { CommandPalette } from "@/components/shell/CommandPalette";
+import { HeaderShell } from "@/components/shell/HeaderShell";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ const NOTIFICATION_COUNT = 0;
 
 export function Header({ email, businessName }: HeaderProps) {
   return (
-    <header className="flex h-[52px] shrink-0 items-center gap-4 border-b border-hairline bg-base px-6 print:hidden">
+    <HeaderShell>
       <Breadcrumbs />
 
       <div className="mx-auto hidden w-full max-w-md md:block">
@@ -57,6 +58,6 @@ export function Header({ email, businessName }: HeaderProps) {
         <ThemeToggle />
         <UserMenu email={email} businessName={businessName} />
       </div>
-    </header>
+    </HeaderShell>
   );
 }

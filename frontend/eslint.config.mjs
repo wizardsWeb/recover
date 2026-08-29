@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent tooling, not application source. These are CommonJS helper scripts
+    // that ship with skill definitions; linting them with the app's TypeScript
+    // rules reports `require()` as an error in files that cannot use `import`.
+    ".claude/**",
   ]),
 ]);
 
