@@ -6,7 +6,19 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* `dark:` applies inside a `.dark` ancestor — except inside a subtree that has
+   explicitly opted out with `.ground-light`.
+   ---------------------------------------------------------------------------
+   Without the exclusion, a forced-light page still fires every `dark:` utility,
+   because the variant matches on the ancestor class and knows nothing about the
+   token values a descendant re-declared. That is not hypothetical: the auth
+   inputs carry `dark:bg-input/30` from shadcn, so on a white page viewed by a
+   reader whose system is dark they rendered as filled grey boxes.
+
+   The footer's own `dark` inversion is unaffected. It styles itself through the
+   token layer rather than through `dark:` utilities, which is why re-declaring
+   primitives was enough to invert it. */
+@custom-variant dark (&:is(.dark *):not(.ground-light *));
 
 /* ===========================================================================
    Bureau

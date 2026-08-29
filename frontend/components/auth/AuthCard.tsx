@@ -18,6 +18,13 @@ interface AuthCardProps {
 /**
  * The frame shared by sign-in, sign-up and onboarding.
  *
+ * The fields do not animate in. They used to cascade at 60ms intervals, which
+ * looked pleasant and meant that until the animation finished the form had
+ * invisible fields — and anything that delays requestAnimationFrame (a restored
+ * background tab, a low-end device, a long task elsewhere on the page) leaves a
+ * sign-up form that appears broken. That is a bad trade for a 200ms flourish on
+ * the one screen where a confused reader simply leaves.
+ *
  * No longer a card. A bordered panel floating on a white page was the one
  * container left in the product, and in a system built on hairlines a box around
  * a form is a box around nothing — the column already bounds it. What remains is
