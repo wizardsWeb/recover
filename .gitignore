@@ -55,3 +55,11 @@ supabase/.temp/
 # demo account password in plaintext — the Playwright runner reads it from the
 # working tree rather than from git.
 backend/scripts/demo_state.json
+
+# ---------- Demo recording ----------
+# Playwright writes a ~25MB .webm per run, and the mp4 render is ~15MB. Both are
+# build artefacts of tests/e2e/demo-recording.spec.ts, which is the thing worth
+# versioning.
+frontend/tests/e2e/recordings/
+frontend/test-results/
+docs/demo-recording.mp4
