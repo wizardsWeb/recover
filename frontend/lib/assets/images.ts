@@ -31,15 +31,6 @@ function sized(id: number, slug: string, width: number): string {
   return `https://images.pexels.com/photos/${id}/${slug}.jpeg?auto=compress&cs=tinysrgb&fit=crop&w=${width}`;
 }
 
-/** The landing hero's still image — the poster frame behind the video. */
-export const HERO_IMAGE: StockImage = {
-  src: sized(4307853, "pexels-photo-4307853", 1600),
-  alt: "A merchant working at a laptop from home",
-  photographer: "Ketut Subiyanto",
-  photographerUrl: "https://www.pexels.com/@ketut-subiyanto",
-  source: "https://www.pexels.com/photo/4307853/",
-};
-
 /**
  * The three playbook scenarios, in the order the landing page tells them.
  *
@@ -90,28 +81,43 @@ export const AUTH_PANEL_IMAGES: readonly StockImage[] = [
 /**
  * The landing hero's background loop.
  *
- * Served from the brief's own CDN rather than from Pexels, and it is the one
- * asset on the page with no poster frame. That is deliberate: the section's
- * ground is already near-black, so the first paint before the video arrives is
- * the same black the scrim would have put over a poster anyway. A still from a
- * *different* shot would have been worse than nothing — the frame would swap
- * for an unrelated one the moment the video started.
+ * The brief's asset, re-encoded and served from `public/` rather than hotlinked
+ * from its CDN. The original is not web-optimised: its atom order is
+ * `ftyp / uuid / free / mdat / moov`, with the 13.8MB `mdat` ahead of the
+ * `moov` that describes it. A browser streaming that file cannot read the
+ * metadata — and so cannot start playback — until the whole thing has arrived,
+ * which behind a full-viewport hero means a black rectangle for the length of
+ * the download.
  *
- * It is 13.9MB, which is large for a hero. It sits behind a 70% scrim and is
- * marked decorative, so nothing on the page waits on it and nothing in it needs
- * to be read; the cost is bandwidth on a fast connection rather than a blocked
- * first paint. Worth revisiting with a re-encode if the page ever ships to
- * users on metered connections.
+ * The re-encode fixes that and three other things at once:
+ *
+ *   * `-movflags +faststart` puts `moov` first, so playback starts on the first
+ *     few hundred kilobytes instead of the last.
+ *   * 1920x1080 at 11Mbps became 1280x720 at CRF 28 — 13.9MB to 455KB, a
+ *     thirty-fold cut. It sits behind a 70% scrim, so the detail being thrown
+ *     away is detail nobody could resolve.
+ *   * There is now a poster: the video's own first frame, 59KB, so the first
+ *     paint is the right image rather than black.
+ *   * Self-hosted, so the only page a stranger ever sees does not depend on a
+ *     third-party CDN staying up.
+ *
+ * Regenerate with:
+ *   ffmpeg -i <source> -an -vf scale=1280:-2 -c:v libx264 -crf 28 -preset slow \
+ *     -pix_fmt yuv420p -movflags +faststart public/video/hero-loop.mp4
+ *   ffmpeg -i <source> -vf scale=1280:-2 -frames:v 1 -q:v 6 public/video/hero-poster.jpg
  */
 export const HERO_VIDEO = {
-  src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4",
+  src: "/video/hero-loop.mp4",
+  poster: "/video/hero-poster.jpg",
+  /** Where the footage came from, for anyone re-cutting it. */
+  source:
+    "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4",
 } as const;
 
 /** Everything credited in the footer, de-duplicated by photographer. */
 export const IMAGE_CREDITS: ReadonlyArray<{ name: string; url: string }> = [
   ...new Map(
     [
-      HERO_IMAGE,
       ...Object.values(SCENARIO_IMAGES),
       PAYMENT_FAILURE_IMAGE,
     ].map((asset) => [asset.photographer, { name: asset.photographer, url: asset.photographerUrl }]),

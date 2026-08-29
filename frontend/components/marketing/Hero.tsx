@@ -56,6 +56,7 @@ export function Hero() {
       <video
         className="absolute inset-0 -z-20 size-full object-cover"
         src={HERO_VIDEO.src}
+        poster={HERO_VIDEO.poster}
         autoPlay
         loop
         muted

@@ -95,10 +95,16 @@ export function AuthPanel() {
 
       {/* Dark at the foot where the quote sits, clearing towards the top so the
           photograph survives. It is also what keeps the copy above 4.5:1 on
-          every one of the three images without checking each. */}
+          every one of the three images without having to check each.
+
+          The mid stop is pulled down to 30% rather than the default 50%: at the
+          midpoint the scrim is still 55% opaque by the time it reaches the
+          quote, which left the bottom third of every photograph as a solid
+          black band. The copy sits between 55% and 100% opacity, which is where
+          the contrast floor is met — everything above it is now picture. */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/70 to-ink-900/20"
+        className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/55 via-30% to-ink-900/10"
       />
 
       <div className="relative flex h-full flex-col justify-end p-12">
