@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertTriangle, Percent, Wallet } from "lucide-react";
+import { Activity, AlertTriangle, Percent, Wallet, type LucideIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { KpiCard, type KpiCardProps } from "@/components/domain/KpiCard";
@@ -14,7 +14,10 @@ const TILES: Array<{
   label: string;
   kind: KpiCardProps["kind"];
   tone: KpiCardProps["tone"];
-  icon: KpiCardProps["icon"];
+  // The component, not a rendered element: these entries are declarations, and
+  // the element is built at the call site below. KpiCardProps["icon"] is a
+  // ReactNode now, which a declaration cannot satisfy and JSX cannot construct.
+  icon: LucideIcon;
   read: (o: Overview) => number;
 }> = [
   {
@@ -127,7 +130,7 @@ export function DashboardLiveTicker({ initial }: { initial: Overview }) {
             value={tile.read(overview)}
             kind={tile.kind}
             tone={tile.tone}
-            icon={tile.icon}
+            icon={<tile.icon strokeWidth={1.5} />}
           />
         ))}
       </StaggerList>
