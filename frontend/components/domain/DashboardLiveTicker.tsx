@@ -60,11 +60,11 @@ function LiveDot({ status }: { status: RealtimeStatus }) {
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<span tabIndex={0} className="inline-flex items-center gap-1.5 rounded-full" />}
+        render={<span tabIndex={0} className="inline-flex items-center gap-1.5 rounded-none" />}
       >
         <span
           aria-hidden
-          className={`inline-block size-2 rounded-full ${
+          className={`inline-block size-2 rounded-none ${
             live ? "animate-pulse bg-success" : "bg-ink-faint"
           }`}
         />

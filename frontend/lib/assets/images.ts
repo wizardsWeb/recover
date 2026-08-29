@@ -114,10 +114,49 @@ export const HERO_VIDEO = {
     "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4",
 } as const;
 
+/**
+ * The three plates the landing page is built around.
+ *
+ * Architectural, achromatic, and shot in flat light — chosen to sit under type
+ * rather than compete with it. The design puts a 160px headline over the first
+ * one, so what matters is that each has a large area of even tone somewhere a
+ * line of text can land; a busy frame would make the headline unreadable at any
+ * scrim opacity, and this design does not use a scrim.
+ *
+ * Ordered dark to light on purpose: the page opens grey, brightens through the
+ * middle, and closes on ink. Requested at 2400px because they are full-bleed on
+ * a large display, and Pexels resizes at the CDN so the width costs us nothing
+ * to ask for.
+ */
+export const PLATES: Record<"open" | "middle" | "close", StockImage> = {
+  open: {
+    src: sized(17455309, "pexels-photo-17455309", 2400),
+    alt: "A minimalist building facade against an overcast sky",
+    photographer: "Fuad Mammadov",
+    photographerUrl: "https://www.pexels.com/@fdmmdv",
+    source: "https://www.pexels.com/photo/17455309/",
+  },
+  middle: {
+    src: sized(20578676, "pexels-photo-20578676", 2400),
+    alt: "The plain walls of a modern building meeting at an angle",
+    photographer: "Nadine Ginzel",
+    photographerUrl: "https://www.pexels.com/@nadine-ginzel-80607840",
+    source: "https://www.pexels.com/photo/20578676/",
+  },
+  close: {
+    src: sized(18145557, "pexels-photo-18145557", 2400),
+    alt: "Concrete detail on a minimalist structure",
+    photographer: "Entdecker Fuchs",
+    photographerUrl: "https://www.pexels.com/@entdeckerfuchs",
+    source: "https://www.pexels.com/photo/18145557/",
+  },
+};
+
 /** Everything credited in the footer, de-duplicated by photographer. */
 export const IMAGE_CREDITS: ReadonlyArray<{ name: string; url: string }> = [
   ...new Map(
     [
+      ...Object.values(PLATES),
       ...Object.values(SCENARIO_IMAGES),
       PAYMENT_FAILURE_IMAGE,
     ].map((asset) => [asset.photographer, { name: asset.photographer, url: asset.photographerUrl }]),

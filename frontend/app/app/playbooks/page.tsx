@@ -76,7 +76,7 @@ function PlaybookCard({ playbook }: { playbook: PlaybookSummary }) {
     <LiftCard staggered effect="scale">
       <div
         className={cn(
-          "h-full rounded-card border border-hairline border-l-[3px] bg-elevated bg-gradient-to-br to-transparent p-5 shadow-card",
+          "h-full rounded-none border border-hairline border-l-[3px] bg-elevated bg-gradient-to-br to-transparent p-5 shadow-card",
           style?.tint,
           style?.rule,
           // A paused playbook is dimmed rather than hidden: a merchant needs to
@@ -87,7 +87,7 @@ function PlaybookCard({ playbook }: { playbook: PlaybookSummary }) {
         <div className="flex items-start gap-3">
           <span
             className={cn(
-              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none",
               style?.chip,
             )}
           >
@@ -100,7 +100,7 @@ function PlaybookCard({ playbook }: { playbook: PlaybookSummary }) {
                 {playbook.label}
               </h2>
               {!playbook.enabled ? (
-                <span className="rounded-4xl bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
+                <span className="rounded-none bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
                   Paused
                 </span>
               ) : null}

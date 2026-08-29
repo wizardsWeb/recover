@@ -57,11 +57,11 @@ export default async function AuditPage({ searchParams }: PageProps<"/app/audit"
       />
       <div className="mt-6">
         {failed ? (
-          <div className="rounded-card border border-hairline bg-elevated py-12 text-center text-sm text-ink-muted shadow-card">
+          <div className="rounded-none border border-hairline bg-elevated py-12 text-center text-sm text-ink-muted shadow-card">
             Could not load the audit trail. The API did not respond.
           </div>
         ) : events.length === 0 ? (
-          <div className="overflow-hidden rounded-card border border-hairline bg-elevated shadow-card">
+          <div className="overflow-hidden rounded-none border border-hairline bg-elevated shadow-card">
             <NoAuditEvents />
           </div>
         ) : (

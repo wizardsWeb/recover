@@ -35,7 +35,7 @@ export default function PlaybookDetailLoading() {
           {ARMS.map((arm) => (
             <div key={arm} className="flex items-center gap-2">
               <Skeleton className="h-3 w-[180px] shrink-0" />
-              <Skeleton className="h-2 flex-1 rounded-4xl" />
+              <Skeleton className="h-2 flex-1 rounded-none" />
               <Skeleton className="h-3 w-10 shrink-0" />
             </div>
           ))}
@@ -47,7 +47,7 @@ export default function PlaybookDetailLoading() {
         <div className="space-y-2 rounded-lg border border-hairline p-4">
           {ROWS.map((row) => (
             <div key={row} className="flex items-center gap-4">
-              <Skeleton className="h-5 w-20 rounded-4xl" />
+              <Skeleton className="h-5 w-20 rounded-none" />
               <Skeleton className="h-4 flex-1 max-w-[200px]" />
               <Skeleton className="h-4 w-16" />
               <Skeleton className="h-3 w-20" />

@@ -65,7 +65,7 @@ export default async function DashboardPage() {
           qualifies the "Dashboard" heading and its status lives in the client. */}
       <DashboardLiveTicker initial={overview} />
 
-      <section className="mt-8 rounded-card border border-hairline bg-elevated p-6 shadow-card">
+      <section className="mt-8 rounded-none border border-hairline bg-elevated p-6 shadow-card">
         <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
             Recovery funnel

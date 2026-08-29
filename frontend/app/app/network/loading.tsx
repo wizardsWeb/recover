@@ -59,7 +59,7 @@ export default function NetworkLoading() {
               </div>
             ))}
           </div>
-          <Skeleton className="mt-5 h-2 w-full rounded-full" />
+          <Skeleton className="mt-5 h-2 w-full rounded-none" />
         </div>
       </div>
     </>

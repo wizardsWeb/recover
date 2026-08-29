@@ -78,7 +78,7 @@ function LiveDot({ state }: { state: ConnectionState }) {
 
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-faint" title={label}>
-      <span className={cn("size-1.5 rounded-full", tone)} aria-hidden />
+      <span className={cn("size-1.5 rounded-none", tone)} aria-hidden />
       {label}
     </span>
   );
@@ -91,7 +91,7 @@ function AlertCard({ alert }: { alert: NetworkAlert }) {
   return (
     <Alert
       variant={severity.destructive ? "destructive" : "default"}
-      className={cn("rounded-card", severity.tone)}
+      className={cn("rounded-none", severity.tone)}
     >
       {/* Never colour alone — the icon and the severity word carry the same
           meaning for anyone who cannot separate the two backgrounds. */}
@@ -222,7 +222,7 @@ export function NetworkAlertBanner({ initial }: { initial: AlertsResponse }) {
       <AnimatePresence initial={false} mode="popLayout">
         {active.length === 0 ? (
           <motion.div key="healthy" {...motionProps}>
-            <Alert className="rounded-card border-success/30 bg-success-subtle text-success">
+            <Alert className="rounded-none border-success/30 bg-success-subtle text-success">
               <CheckCircle2 aria-hidden />
               <AlertTitle>All banks healthy</AlertTitle>
               <AlertDescription className="text-xs text-current opacity-90">

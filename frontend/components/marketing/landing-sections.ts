@@ -1,15 +1,13 @@
 /**
- * The landing page's nav destinations, in the order they appear on the page.
+ * The landing page's sections, in the order they appear.
  *
- * One list, read by three things: the floating nav renders it, the scroll spy
- * observes these ids, and each section takes its own id from the same strings.
- * A second hand-written copy inside the nav is the version that silently points
- * at a section somebody renamed.
+ * One list, read by three things: the nav renders it, the scroll spy observes
+ * these ids, and each section takes its own id from the same strings.
  *
- * The brief's fifth link was "Pricing". There is no pricing page and no pricing
- * — a nav item that promises one and scrolls to a call-to-action is a small lie
- * told in the most prominent element on the page — so that slot is "Results",
- * which is a section that exists.
+ * The labels are one word each and lowercase-cased as nouns, joined by commas
+ * in the nav the way an index is. "Leaks" rather than "Product", "Method"
+ * rather than "How it works": this is a page about a subject, and the nav is a
+ * table of contents for it, not a menu of marketing pages.
  */
 export interface LandingSection {
   id: string;
@@ -17,9 +15,9 @@ export interface LandingSection {
 }
 
 export const LANDING_SECTIONS: readonly LandingSection[] = [
-  { id: "top", label: "Home" },
-  { id: "leaks", label: "Product" },
-  { id: "how-it-works", label: "How it works" },
-  { id: "results", label: "Results" },
-  { id: "start", label: "Contact" },
+  { id: "index", label: "Index" },
+  { id: "leaks", label: "Leaks" },
+  { id: "method", label: "Method" },
+  { id: "evidence", label: "Evidence" },
+  { id: "start", label: "Start" },
 ];

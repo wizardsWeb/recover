@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import { createClient } from "@/lib/supabase/client";
 
 interface LoginFormProps {
@@ -47,7 +46,7 @@ export function LoginForm({ next }: LoginFormProps) {
     // as decoration — and `StaggeredItem` drops the transform entirely under
     // reduced motion.
     <form onSubmit={onSubmit} className="grid gap-4">
-      <StaggeredItem index={0} className="grid gap-2">
+      <div className="grid gap-2">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -58,9 +57,9 @@ export function LoginForm({ next }: LoginFormProps) {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-      </StaggeredItem>
+      </div>
 
-      <StaggeredItem index={1} className="grid gap-2">
+      <div className="grid gap-2">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
@@ -71,13 +70,13 @@ export function LoginForm({ next }: LoginFormProps) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-      </StaggeredItem>
+      </div>
 
-      <StaggeredItem index={2} className="mt-2">
+      <div className="mt-2">
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Signing in…" : "Sign in"}
         </Button>
-      </StaggeredItem>
+      </div>
     </form>
   );
 }

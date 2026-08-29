@@ -79,7 +79,7 @@ function ObservableNode({ data }: NodeProps) {
       <span
         aria-hidden
         className={cn(
-          "size-1.5 shrink-0 rounded-full",
+          "size-1.5 shrink-0 rounded-none",
           observed === true ? "bg-brand" : observed === false ? "bg-ink-faint" : "bg-transparent",
         )}
       />
@@ -101,7 +101,7 @@ function RootCauseNode({ data }: NodeProps) {
     <div
       title={description || label}
       className={cn(
-        "flex h-[56px] w-[210px] items-center justify-between gap-2 rounded-4xl border px-3.5 py-2",
+        "flex h-[56px] w-[210px] items-center justify-between gap-2 rounded-none border px-3.5 py-2",
         isWinner
           ? "border-brand bg-brand text-brand-foreground"
           : onPath
@@ -221,9 +221,9 @@ function PosteriorPanel({ dag }: { dag: CaseDag }) {
                 {formatPercent(probability, 1)}
               </span>
             </div>
-            <div className="mt-0.5 h-1 rounded-full bg-subtle">
+            <div className="mt-0.5 h-1 rounded-none bg-subtle">
               <div
-                className={cn("h-full rounded-full", nodeId === winner ? "bg-brand" : "bg-edge")}
+                className={cn("h-full rounded-none", nodeId === winner ? "bg-brand" : "bg-edge")}
                 // A floor of 1% so a cause the evidence crushed is still a
                 // visible sliver rather than an empty row that reads as a
                 // rendering fault.

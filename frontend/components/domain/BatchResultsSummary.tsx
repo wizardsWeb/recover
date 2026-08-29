@@ -143,7 +143,7 @@ export function BatchResultsSummary({
         />
       </StaggerList>
 
-      <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+      <section className="rounded-none border border-hairline bg-elevated p-5 shadow-card">
         <h3 className="flex items-center gap-2 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
           <ShieldCheck className="size-4 text-success" strokeWidth={1.75} aria-hidden />
           Compliance

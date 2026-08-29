@@ -39,7 +39,7 @@ function Field({ label, value, tone }: { label: string; value: string; tone?: st
 function EmptyTile({ bucket }: { bucket: UpliftBucket }) {
   const config = UPLIFT_BUCKET_CONFIG[bucket];
   return (
-    <div className="h-full rounded-card border border-dashed border-hairline p-5 opacity-60">
+    <div className="h-full rounded-none border border-dashed border-hairline p-5 opacity-60">
       <h3 className="font-display text-base font-semibold text-ink-muted">{config.label}</h3>
       <p className="mt-1 text-xs text-ink-faint">No cases in this segment yet.</p>
     </div>
@@ -73,7 +73,7 @@ function BucketTile({ row }: { row: UpliftBucketRow }) {
           </div>
           <span
             className={cn(
-              "shrink-0 rounded-4xl px-2 py-0.5 font-mono text-xs tabular-nums",
+              "shrink-0 rounded-none px-2 py-0.5 font-mono text-xs tabular-nums",
               harmful ? "bg-danger-subtle text-danger" : config.className,
             )}
           >

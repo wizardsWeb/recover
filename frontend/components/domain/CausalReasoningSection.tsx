@@ -32,7 +32,7 @@ function DagSkeleton() {
         {[0, 1, 2, 3, 4].map((row) => (
           <div key={row} className="space-y-1">
             <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-1 w-full rounded-full" />
+            <Skeleton className="h-1 w-full rounded-none" />
           </div>
         ))}
       </div>

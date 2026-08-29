@@ -62,7 +62,7 @@ export function CasesTable({
   return (
     <div
       className={cn(
-        "overflow-x-auto rounded-card border border-hairline bg-elevated shadow-card",
+        "overflow-x-auto rounded-none border border-hairline bg-elevated shadow-card",
         className,
       )}
     >

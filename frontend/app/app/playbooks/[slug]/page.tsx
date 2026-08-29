@@ -47,15 +47,15 @@ function ArmRow({ arm }: { arm: BanditArmPosterior }) {
         </span>
       </TableCell>
       <TableCell className="w-[180px] px-3 py-2">
-        <div className="relative h-1.5 w-full rounded-4xl bg-inset">
+        <div className="relative h-1.5 w-full rounded-none bg-inset">
           {!cold ? (
             <>
               <div
-                className="absolute h-full rounded-4xl bg-brand/25"
+                className="absolute h-full rounded-none bg-brand/25"
                 style={{ left: `${low}%`, width: `${Math.max(high - low, 1)}%` }}
               />
               <div
-                className="absolute h-full w-0.5 rounded-4xl bg-brand"
+                className="absolute h-full w-0.5 rounded-none bg-brand"
                 style={{ left: `${mean}%` }}
               />
             </>
@@ -160,7 +160,7 @@ export default async function PlaybookDetailPage({
         />
       </StaggerList>
 
-      <section className="mt-6 space-y-3 rounded-card border border-hairline bg-elevated p-5 shadow-card">
+      <section className="mt-6 space-y-3 rounded-none border border-hairline bg-elevated p-5 shadow-card">
         <div>
           <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">Arms</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
@@ -220,7 +220,7 @@ export default async function PlaybookDetailPage({
           // a second bespoke table here is a second place to fix a bug.
           <CasesTable cases={playbook.recent_cases} />
         ) : (
-          <p className="rounded-card border border-hairline bg-elevated py-8 text-center text-xs text-ink-faint">
+          <p className="rounded-none border border-hairline bg-elevated py-8 text-center text-xs text-ink-faint">
             No cases under this playbook yet.
           </p>
         )}

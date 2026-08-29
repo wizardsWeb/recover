@@ -78,11 +78,11 @@ export function PromiseToPayCard({ promise }: { promise: Promise }) {
 
       <div className="flex flex-wrap items-center gap-1.5">
         {promise.partial_pct != null ? (
-          <span className="rounded-4xl bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink">
+          <span className="rounded-none bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink">
             {promise.partial_pct}% now
           </span>
         ) : null}
-        <span className="rounded-4xl bg-elevated px-2 py-0.5 text-[10px] text-ink">
+        <span className="rounded-none bg-elevated px-2 py-0.5 text-[10px] text-ink">
           {remaining === null
             ? `Due ${promise.date_hint ?? "date not given"}`
             : overdue
@@ -92,7 +92,7 @@ export function PromiseToPayCard({ promise }: { promise: Promise }) {
                 : `Promise due in ${remaining} day${remaining === 1 ? "" : "s"}`}
         </span>
         {promise.reason_offered ? (
-          <span className="rounded-4xl bg-elevated px-2 py-0.5 text-[10px] text-ink-muted">
+          <span className="rounded-none bg-elevated px-2 py-0.5 text-[10px] text-ink-muted">
             {promise.reason_offered.replace(/_/g, " ")}
           </span>
         ) : null}

@@ -41,7 +41,7 @@ const COLUMNS = ["", "Time", "Actor", "Event", "Case"];
 
 export function AuditTable({ events }: { events: readonly AuditEvent[] }) {
   return (
-    <div className="overflow-x-auto rounded-card border border-hairline bg-elevated shadow-card">
+    <div className="overflow-x-auto rounded-none border border-hairline bg-elevated shadow-card">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
