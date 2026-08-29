@@ -17,10 +17,13 @@ stamped ``metadata.is_simulator_fixture = true`` and reset keys off that stamp,
 so a merchant who added their own customer alongside the demo keeps it.
 """
 
+import asyncio
 from typing import Any
 
 from app.agent.bandit.context import extract_context_vector, make_context_bucket
 from app.agent.bandit.thompson import write_posterior
+from app.agent.causal_dag.seed import seed_causal_dag
+from app.db import get_service_client
 from app.logging import get_logger
 from app.simulator import fixtures
 from app.simulator.event_generator import get_or_create_customer
@@ -125,6 +128,21 @@ async def load_fixtures_for_merchant(
     # are only meaningful alongside the personas they describe.
     priors = await seed_bandit_priors(supabase_client, merchant_id)
 
+    # The causal graph is global reference data, not this merchant's, so it is
+    # published rather than seeded per tenant — running it here just means a
+    # freshly loaded environment has the table populated without a second call.
+    # Failure is swallowed: the agent reasons from `definitions.py`, so an
+    # unwritten table costs a SQL view of the graph and nothing else.
+    dag_nodes = 0
+    try:
+        # The service-role client, not the caller's. `causal_dag` has no
+        # merchant column, so its RLS grants an authenticated user SELECT and
+        # nothing else — writing it through the request's own client fails with
+        # 42501, which is the mistake Phase 10's downtime endpoint made.
+        dag_nodes = int((await asyncio.to_thread(seed_causal_dag, get_service_client()))["nodes"])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("causal_dag_seed_failed", error=str(exc))
+
     supabase_client.table("audit_events").insert(
         {
             "case_id": None,
@@ -136,6 +154,7 @@ async def load_fixtures_for_merchant(
                 "customers_created": customers_created,
                 "payment_methods": payment_methods,
                 "bandit_priors": priors,
+                "causal_dag_nodes": dag_nodes,
             },
             "trace_id": trace_id,
         }
@@ -155,6 +174,7 @@ async def load_fixtures_for_merchant(
         "personas": [persona["name"] for persona in fixtures.ALL_PERSONAS],
         "bandit_priors_seeded": True,
         "bandit_prior_rows": priors["rows"],
+        "causal_dag_nodes": dag_nodes,
     }
 
 

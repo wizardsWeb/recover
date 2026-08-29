@@ -21,7 +21,6 @@ import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { seedUpliftHistory } from "@/lib/api/roi";
 
 export function SeedUpliftButton() {
@@ -51,8 +50,10 @@ export function SeedUpliftButton() {
 
   return (
     <Button variant="outline" size="sm" onClick={seed} disabled={busy} className="print:hidden">
-      {busy ? <Spinner className="size-3.5" /> : <Sparkles size={14} />}
-      {seeding ? "Seeding…" : "Seed demo data"}
+      <Sparkles aria-hidden />
+      {/* The label carries the state. A spinner beside a label that already
+          says "Seeding…" is the same fact twice. */}
+      {busy ? "Seeding…" : "Seed demo data"}
     </Button>
   );
 }

@@ -118,15 +118,36 @@ def test_fire_B3_creates_eight_events(loaded_client: TestClient, db: FakeSupabas
 
 
 @pytest.mark.parametrize("code", ["B1", "B2"])
-def test_batch_scenarios_are_accepted_but_write_nothing(
+def test_batch_scenarios_fire_no_event_of_their_own(
     code: str, loaded_client: TestClient, db: FakeSupabase
 ) -> None:
+    """Neither is a case. B1 is a background run over a thousand of them and B2
+    is a figure computed on read, so 202 rather than 200 and no event row."""
     response = loaded_client.post(f"/api/simulator/scenarios/{code}")
 
     assert response.status_code == 202
-    assert "Phase 11" in response.json()["message"]
-    assert db.count("recovery_cases") == 0
     assert db.count("events") == 0
+
+
+def test_b1_hands_back_a_batch_id_to_subscribe_to(
+    loaded_client: TestClient, db: FakeSupabase
+) -> None:
+    """The scenario is only useful if the caller can watch what it started."""
+    response = loaded_client.post("/api/simulator/scenarios/B1")
+
+    batch_id = response.json()["caseId"]
+    assert batch_id
+    assert [run["id"] for run in db.rows("batch_runs")] == [batch_id]
+
+
+def test_b2_starts_nothing_because_uplift_is_computed_on_read(
+    loaded_client: TestClient, db: FakeSupabase
+) -> None:
+    """Manufacturing a case here would put a fabricated row behind a real figure."""
+    loaded_client.post("/api/simulator/scenarios/B2")
+
+    assert db.rows("batch_runs") == []
+    assert db.count("recovery_cases") == 0
 
 
 def test_inject_reply_creates_customer_reply_row(
@@ -197,3 +218,18 @@ def test_status_caps_the_event_tail_at_twenty(loaded_client: TestClient) -> None
     body = loaded_client.get("/api/simulator/status").json()
 
     assert len(body["recentEvents"]) == 20
+
+
+def test_loading_fixtures_publishes_the_causal_graph(
+    loaded_client: TestClient, db: FakeSupabase
+) -> None:
+    """A freshly loaded environment should not need a second call to see the
+    graph in `causal_dag` — and the write goes through the service role, which
+    the fixture points at this same fake."""
+    assert db.rows("causal_dag")
+    assert {row["playbook"] for row in db.rows("causal_dag")} == {
+        "subscription_failure",
+        "checkout_abandonment",
+        "failed_payment",
+        "b2b_overdue",
+    }

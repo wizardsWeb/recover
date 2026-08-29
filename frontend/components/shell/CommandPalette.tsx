@@ -93,11 +93,11 @@ export function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-md border border-hairline bg-subtle px-3 py-1.5 text-sm text-ink-faint transition-colors hover:border-edge hover:text-ink-muted"
+        className="flex w-full items-center gap-2 rounded-full border border-hairline bg-inset py-1.5 pr-1.5 pl-3.5 text-sm text-ink-faint transition-colors duration-150 hover:border-edge hover:text-ink-muted focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand/25 focus-visible:outline-none"
       >
-        <Search className="size-4 shrink-0" aria-hidden />
+        <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
         <span className="flex-1 text-left">Search cases, customers, IDs…</span>
-        <kbd className="rounded-sm border border-hairline bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
+        <kbd className="rounded-full border border-hairline bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink-faint">
           ⌘K
         </kbd>
       </button>

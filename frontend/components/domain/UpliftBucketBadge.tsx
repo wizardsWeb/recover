@@ -14,6 +14,7 @@
  */
 
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UpliftBucket } from "@/lib/api/roi";
 import { cn } from "@/lib/utils/cn";
 
@@ -62,8 +63,14 @@ interface UpliftBucketBadgeProps {
 export function UpliftBucketBadge({ bucket, className }: UpliftBucketBadgeProps) {
   const config = UPLIFT_BUCKET_CONFIG[bucket as UpliftBucket] ?? UPLIFT_BUCKET_CONFIG.unknown;
   return (
-    <Badge className={cn(config.className, className)} title={config.title}>
-      {config.label}
-    </Badge>
+    // The label alone is a category name; the tooltip is what the category
+    // means. `tabIndex` makes it reachable, which the `title` attribute it
+    // replaces never was.
+    <Tooltip>
+      <TooltipTrigger render={<Badge tabIndex={0} className={cn(config.className, className)} />}>
+        {config.label}
+      </TooltipTrigger>
+      <TooltipContent>{config.title}</TooltipContent>
+    </Tooltip>
   );
 }

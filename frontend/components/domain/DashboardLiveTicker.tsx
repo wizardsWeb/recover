@@ -1,43 +1,51 @@
 "use client";
 
+import { Activity, AlertTriangle, Percent, Wallet } from "lucide-react";
 import { useCallback, useState } from "react";
 
+import { KpiCard, type KpiCardProps } from "@/components/domain/KpiCard";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { AnimatedINR, AnimatedNumber, AnimatedPercent } from "@/components/ui/AnimatedNumber";
-import { Card, CardContent } from "@/components/ui/card";
+import { StaggerList } from "@/components/ui/StaggerList";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchOverview, type Overview } from "@/lib/api/cases";
 import { useRealtimeCases, type RealtimeStatus } from "@/lib/hooks/useRealtimeCases";
 
-const TILES = [
+const TILES: Array<{
+  label: string;
+  kind: KpiCardProps["kind"];
+  tone: KpiCardProps["tone"];
+  icon: KpiCardProps["icon"];
+  read: (o: Overview) => number;
+}> = [
   {
-    label: "At Risk Today",
+    label: "At risk today",
     kind: "inr",
-    read: (o: Overview) => o.amount_at_risk_today_cents,
-    className: "text-warning",
-    surface: "bg-warning-subtle",
+    tone: "warning",
+    icon: AlertTriangle,
+    read: (o) => o.amount_at_risk_today_cents,
   },
   {
-    label: "Recovered Today",
+    label: "Recovered today",
     kind: "inr",
-    read: (o: Overview) => o.amount_recovered_today_cents,
-    className: "text-success",
-    surface: "bg-success-subtle",
+    tone: "success",
+    icon: Wallet,
+    read: (o) => o.amount_recovered_today_cents,
   },
   {
-    label: "Cases In Flight",
+    label: "Cases in flight",
     kind: "count",
-    read: (o: Overview) => o.cases_in_flight,
-    className: "text-info",
-    surface: "bg-info-subtle",
+    tone: "info",
+    icon: Activity,
+    read: (o) => o.cases_in_flight,
   },
   {
-    label: "Recovery Rate",
+    label: "Recovery rate",
     kind: "percent",
-    read: (o: Overview) => o.recovery_rate_today,
-    className: "text-brand",
-    surface: "bg-brand-subtle",
+    tone: "brand",
+    icon: Percent,
+    read: (o) => o.recovery_rate_today,
   },
-] as const;
+];
 
 /**
  * The live connection indicator.
@@ -50,18 +58,24 @@ const TILES = [
 function LiveDot({ status }: { status: RealtimeStatus }) {
   const live = status === "live";
   return (
-    <span
-      className="inline-flex items-center gap-1.5 text-xs"
-      title={live ? "Live — updating as cases change" : "Not connected — showing the last reading"}
-    >
-      <span
-        aria-hidden
-        className={`inline-block size-2 rounded-full ${
-          live ? "animate-pulse bg-success" : "bg-ink-faint"
-        }`}
-      />
-      <span className="sr-only">{live ? "Live updates connected" : "Live updates disconnected"}</span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={<span tabIndex={0} className="inline-flex items-center gap-1.5 rounded-full" />}
+      >
+        <span
+          aria-hidden
+          className={`inline-block size-2 rounded-full ${
+            live ? "animate-pulse bg-success" : "bg-ink-faint"
+          }`}
+        />
+        <span className="sr-only">
+          {live ? "Live updates connected" : "Live updates disconnected"}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {live ? "Live — updating as cases change" : "Not connected — showing the last reading"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -104,29 +118,19 @@ export function DashboardLiveTicker({ initial }: { initial: Overview }) {
         titleAdornment={<LiveDot status={status} />}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        {TILES.map((tile) => {
-          const value = tile.read(overview);
-          return (
-            <Card key={tile.label} className={`border-hairline ${tile.surface}`}>
-              <CardContent className="py-4">
-                <div className="mb-1 text-xs text-ink-faint">{tile.label}</div>
-                <div
-                  className={`font-display text-3xl font-semibold tracking-tight ${tile.className}`}
-                >
-                  {tile.kind === "inr" ? (
-                    <AnimatedINR value={value} />
-                  ) : tile.kind === "percent" ? (
-                    <AnimatedPercent value={value} />
-                  ) : (
-                    <AnimatedNumber value={value} />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <StaggerList className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {TILES.map((tile) => (
+          <KpiCard
+            key={tile.label}
+            staggered
+            label={tile.label}
+            value={tile.read(overview)}
+            kind={tile.kind}
+            tone={tile.tone}
+            icon={tile.icon}
+          />
+        ))}
+      </StaggerList>
     </>
   );
 }

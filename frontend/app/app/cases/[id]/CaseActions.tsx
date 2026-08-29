@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { AlertOctagon, PauseCircle, UserPlus } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { createHandoff, overrideCase } from "@/lib/api/cases";
@@ -39,7 +42,9 @@ type Action = "pause" | "stop" | "escalate";
 interface ActionSpec {
   action: Action;
   label: string;
-  className: string;
+  /** Which shadcn variant carries the weight of the action. */
+  variant: "outline" | "destructive" | "secondary";
+  icon: LucideIcon;
   /** Shown in the dialog — what actually happens, not a restatement of the label. */
   consequence: string;
   needsReason: boolean;
@@ -49,7 +54,8 @@ const ACTIONS: ActionSpec[] = [
   {
     action: "pause",
     label: "Pause recovery",
-    className: "text-ink-muted",
+    variant: "outline",
+    icon: PauseCircle,
     consequence:
       "The agent stops working this case. Nothing further is sent, and the case can be reopened.",
     needsReason: false,
@@ -57,7 +63,8 @@ const ACTIONS: ActionSpec[] = [
   {
     action: "stop",
     label: "Stop & close",
-    className: "text-danger",
+    variant: "destructive",
+    icon: AlertOctagon,
     consequence:
       "The case closes for good. No further messages, retries, or follow-ups on this recovery.",
     needsReason: true,
@@ -65,7 +72,8 @@ const ACTIONS: ActionSpec[] = [
   {
     action: "escalate",
     label: "Escalate to human",
-    className: "text-ink-muted",
+    variant: "secondary",
+    icon: UserPlus,
     consequence:
       "A handoff card is created for your team with the customer's history and suggested next steps.",
     needsReason: true,
@@ -130,23 +138,33 @@ export function CaseActions({
           : "Human overrides are logged to the audit trail."}
       </p>
 
-      {ACTIONS.map((spec) => (
-        <button
-          key={spec.action}
-          type="button"
-          disabled={busy || isClosed}
-          onClick={() => {
-            setReason("");
-            setOpen(spec);
-          }}
-          className={`flex w-full items-center gap-2 rounded border border-hairline px-3 py-2 text-left text-xs transition-colors hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50 ${spec.className}`}
-        >
-          {pending === spec.action ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : null}
-          {spec.label}
-        </button>
-      ))}
+      {/* The variant *is* the warning. `destructive` on Stop and a quiet
+          `outline` on Pause says which of these is reversible before the reader
+          gets to the confirmation dialog — three identically-styled buttons
+          would put that information only in the wording. */}
+      {ACTIONS.map((spec) => {
+        const Icon = spec.icon;
+        const running = pending === spec.action;
+        return (
+          <Button
+            key={spec.action}
+            variant={spec.variant}
+            size="sm"
+            className="w-full justify-start"
+            disabled={busy || isClosed}
+            onClick={() => {
+              setReason("");
+              setOpen(spec);
+            }}
+          >
+            <Icon aria-hidden />
+            {/* No spinner. The label says what is happening, which a spinner
+                never does, and the button is already disabled — a second
+                indicator of the same fact is noise. */}
+            {running ? "Recording…" : spec.label}
+          </Button>
+        );
+      })}
 
       <AlertDialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>
         <AlertDialogContent>
@@ -157,9 +175,7 @@ export function CaseActions({
 
           {open?.needsReason ? (
             <div className="space-y-1.5">
-              <label htmlFor="override-reason" className="text-xs text-ink-muted">
-                Reason
-              </label>
+              <Label htmlFor="override-reason">Reason</Label>
               <Textarea
                 id="override-reason"
                 value={reason}

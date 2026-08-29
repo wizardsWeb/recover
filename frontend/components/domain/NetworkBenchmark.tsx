@@ -15,6 +15,8 @@
 
 import { Info, Users } from "lucide-react";
 
+import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BenchmarkResponse } from "@/lib/api/network";
 import { formatPercent } from "@/lib/utils/format";
 
@@ -36,12 +38,12 @@ function Figure({
 }) {
   return (
     <div>
-      <div className="text-[10px] tracking-wide text-ink-faint uppercase">{label}</div>
+      <div className="text-[10px] tracking-[0.06em] text-ink-faint uppercase">{label}</div>
       <div
         className={
           emphasis
-            ? "font-mono text-2xl tabular-nums text-brand"
-            : "font-mono text-2xl tabular-nums text-ink-muted"
+            ? "font-display text-2xl font-semibold text-brand tabular-nums"
+            : "font-display text-2xl font-semibold text-ink-muted tabular-nums"
         }
       >
         {value}
@@ -67,32 +69,44 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
       </div>
 
       <div className="mt-5">
-        <div className="relative h-2 rounded-full bg-subtle">
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-brand-subtle"
-            style={{ width: `${position}%` }}
-            aria-hidden
-          />
-          {/* Median and top decile as tick marks on the same axis, so the
-              merchant's position is read against them rather than described. */}
-          {[
-            { at: median, label: "Median" },
-            { at: top, label: "Top decile" },
-          ].map((mark) => (
+        {/* shadcn `Progress` carries the track, the fill and the aria
+            (`role="progressbar"` with the value and bounds) — which the
+            hand-rolled div never had. The ticks and the position marker are
+            layered over it: they are three readings on one axis, and Progress
+            models exactly one. */}
+        <Progress value={position} className="relative block" aria-label="Your recovery rate against the network">
+          <ProgressTrack className="h-2 overflow-visible bg-subtle">
+            <ProgressIndicator className="rounded-full bg-brand-subtle" />
+
+            {/* Median and top decile as tick marks on the same axis, so the
+                merchant's position is read against them rather than described. */}
+            {[
+              { at: median, label: "Median" },
+              { at: top, label: "Top decile" },
+            ].map((mark) => (
+              <Tooltip key={mark.label}>
+                <TooltipTrigger
+                  render={
+                    <span
+                      tabIndex={0}
+                      className="absolute inset-y-[-4px] w-px bg-ink-faint"
+                      style={{ left: `${Math.min(100, Math.max(0, mark.at * 100))}%` }}
+                      aria-label={`${mark.label}: ${formatPercent(mark.at)}`}
+                    />
+                  }
+                />
+                <TooltipContent>
+                  {mark.label}: {formatPercent(mark.at)}
+                </TooltipContent>
+              </Tooltip>
+            ))}
             <span
-              key={mark.label}
-              className="absolute inset-y-[-3px] w-px bg-ink-faint"
-              style={{ left: `${Math.min(100, Math.max(0, mark.at * 100))}%` }}
-              title={`${mark.label}: ${formatPercent(mark.at)}`}
+              className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-base bg-brand"
+              style={{ left: `${position}%` }}
               aria-hidden
             />
-          ))}
-          <span
-            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-base bg-brand"
-            style={{ left: `${position}%` }}
-            aria-hidden
-          />
-        </div>
+          </ProgressTrack>
+        </Progress>
         <p className="mt-2 text-xs text-ink-muted">
           {data.percentile !== null ? (
             <>
@@ -110,8 +124,10 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
 
 export function NetworkBenchmark({ data }: { data: BenchmarkResponse }) {
   return (
-    <section className="rounded-lg border border-hairline p-5">
-      <h2 className="text-sm font-medium text-ink">Your recovery rate against the network</h2>
+    <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+        Your recovery rate against the network
+      </h2>
 
       <div className="mt-4">
         {data.basis === "network" ? (
@@ -140,7 +156,7 @@ export function NetworkBenchmark({ data }: { data: BenchmarkResponse }) {
       </div>
 
       <div className="mt-6 border-t border-hairline pt-4">
-        <h3 className="text-[10px] font-medium tracking-wide text-ink-faint uppercase">
+        <h3 className="text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase">
           Insights from the Razorpay network
         </h3>
         <ul className="mt-2 space-y-1.5">

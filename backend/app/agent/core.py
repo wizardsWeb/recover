@@ -45,6 +45,7 @@ from typing import Any
 from app.agent import audit
 from app.agent.bandit.context import extract_context_vector
 from app.agent.bandit.reward import post_reward
+from app.agent.causal_dag.edges import update_dag_edges
 from app.agent.guardrail import run_guardrail
 from app.agent.handoff import create_handoff_attempt
 from app.agent.holdout import HOLDOUT_RATE, assign_holdout, should_hold_out
@@ -63,7 +64,7 @@ from app.agent.models import (
     UpliftVerdict,
 )
 from app.agent.steps.decide import run_decide
-from app.agent.steps.detect import detect_playbook, extract_amount_at_risk
+from app.agent.steps.detect import detect_playbook, extract_amount_at_risk, is_terminal_event
 from app.agent.steps.diagnose import run_diagnose
 from app.agent.steps.execute import run_execute
 from app.agent.steps.learn import run_learn
@@ -120,6 +121,15 @@ async def process_event(
 
     event = dict(event_resp.data[0])
 
+    # A settlement closes a case; it does not open one. Checked before the
+    # playbook lookup because `payment.captured` is not in that map and would
+    # otherwise be dropped as an unrecognised type — which is what left the loop
+    # open before this: the agent could mint a payment link and never learn that
+    # the customer paid it.
+    if is_terminal_event(str(event["event_type"])):
+        await handle_terminal_event(event, merchant_id, supabase_client, trace_id)
+        return None
+
     playbook = detect_playbook(event["event_type"])
     if not playbook:
         log.warning("unrecognised_event_type", event_type=event["event_type"])
@@ -131,6 +141,196 @@ async def process_event(
         return None
 
     return await run_agent_loop(case, event, merchant_id, supabase_client, trace_id)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Terminal events — the customer paid
+# ─────────────────────────────────────────────────────────────────────
+
+#: How a settlement is matched back to the case it settled, most reliable first.
+#:
+#: 1. ``notes.case_id`` — the agent stamps this on every payment link it mints,
+#:    so a link the agent created names its own case. Exact, and the only route
+#:    that cannot match the wrong case.
+#: 2. ``subscription_id`` — for ``subscription.charged``, where the subscription
+#:    is the durable identifier and the payment is not.
+#: 3. the customer — a fallback for a payment made outside anything the agent
+#:    sent. Ambiguous by nature, so it takes the oldest active case and says so
+#:    in the audit row.
+_MATCH_ROUTES = ("notes_case_id", "subscription_id", "customer")
+
+
+async def handle_terminal_event(
+    event: dict[str, Any],
+    merchant_id: str,
+    supabase_client: Any,
+    trace_id: str,
+) -> None:
+    """Close the case a settlement belongs to, and let the bandit learn from it.
+
+    This is the half of the loop that was missing. The agent could diagnose,
+    decide, mint a real payment link and send it — and then never find out
+    whether the customer paid, which means the arm it chose was never credited
+    and the posterior never moved. A bandit that cannot observe its own successes
+    is a random policy with extra steps.
+
+    Never raises. It runs as a background task off a webhook, and Razorpay
+    retries anything that is not a 2xx — an exception here would turn one
+    unmatched payment into an indefinite retry loop.
+    """
+    log = logger.bind(trace_id=trace_id, event_type=event.get("event_type"))
+    payload = event.get("payload") or {}
+
+    try:
+        case, route = await _find_case_for_settlement(payload, merchant_id, supabase_client)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("terminal_event_lookup_failed", error=str(exc))
+        return
+
+    if case is None:
+        # Common and not an error: a merchant's ordinary business also produces
+        # captured payments, and most of them have nothing to do with a recovery.
+        log.info("terminal_event_no_matching_case")
+        return
+
+    case_id = str(case["id"])
+    log = log.bind(case_id=case_id, match_route=route)
+
+    # Only a case the agent still considers its own. A recovered case being
+    # recovered again would post a second reward for one outcome and inflate the
+    # arm that got it; a stopped case being reopened would undo a customer's
+    # opt-out. Both are worse than ignoring a duplicate webhook.
+    if str(case.get("status")) not in _ACTIVE_STATUSES:
+        log.info("terminal_event_case_not_active", status=case.get("status"))
+        return
+
+    # What actually settled, preferring the figure on the payment over the
+    # figure we were hoping for. A partial payment should record what arrived.
+    settled_cents = _settled_amount(payload, case)
+
+    mark_case_recovered(supabase_client, case_id, settled_cents, trace_id)
+
+    await audit.log_agent_step(
+        supabase_client,
+        case_id,
+        merchant_id,
+        "learn",
+        "system",
+        f"terminal_event:{event.get('event_type')}",
+        {
+            "matched_by": route,
+            "settled_cents": settled_cents,
+            "amount_at_risk_cents": int(case.get("amount_at_risk_cents") or 0),
+            "payment_id": payload.get("payment_id"),
+            "subscription_id": payload.get("subscription_id"),
+            "source": payload.get("source", "simulator"),
+            "reason": (
+                "Razorpay confirmed the money arrived. The case closes as recovered and "
+                "the arm that was played is credited."
+            ),
+        },
+        trace_id,
+    )
+
+    # The reward reads the case's own status, so it has to see the closed row
+    # rather than the one fetched before the update.
+    await post_reward(
+        supabase_client,
+        {**case, "status": CaseStatus.RECOVERED.value, "amount_recovered_cents": settled_cents},
+        CaseStatus.RECOVERED.value,
+        trace_id,
+    )
+
+    log.info("terminal_event_case_recovered", settled_cents=settled_cents)
+
+
+def _settled_amount(payload: dict[str, Any], case: dict[str, Any]) -> int:
+    """What arrived, in paise.
+
+    The payment's own amount when the payload carries one, because a customer who
+    paid part of an invoice should have that recorded rather than the full sum the
+    case was opened for. Falls back to the amount at risk, which is what the
+    simulator's events and a bare ``subscription.charged`` give us.
+    """
+    amount = payload.get("amount")
+    if isinstance(amount, int) and not isinstance(amount, bool) and amount > 0:
+        return amount
+    return int(case.get("amount_at_risk_cents") or 0)
+
+
+async def _find_case_for_settlement(
+    payload: dict[str, Any],
+    merchant_id: str,
+    supabase_client: Any,
+) -> tuple[dict[str, Any] | None, str]:
+    """The case a settlement belongs to, and how it was matched.
+
+    Returns ``(None, "")`` when nothing matches. Every query is scoped to
+    ``merchant_id``: the webhook resolved which merchant this is, and a
+    settlement must never be able to close a case in another account.
+    """
+    notes = payload.get("notes") or {}
+    case_id = notes.get("case_id") if isinstance(notes, dict) else None
+    if case_id:
+        found = (
+            supabase_client.table("recovery_cases")
+            .select("*")
+            .eq("merchant_id", merchant_id)
+            .eq("id", str(case_id))
+            .limit(1)
+            .execute()
+        )
+        if found.data:
+            return dict(found.data[0]), "notes_case_id"
+
+    subscription_id = payload.get("subscription_id")
+    if subscription_id:
+        # `metadata->>subscription_id` rather than a column: the id lives in the
+        # case's JSONB metadata, put there by the event that opened it.
+        found = (
+            supabase_client.table("recovery_cases")
+            .select("*")
+            .eq("merchant_id", merchant_id)
+            .in_("status", _ACTIVE_STATUSES)
+            .order("opened_at", desc=False)
+            .execute()
+        )
+        for row in found.data or []:
+            if str((row.get("metadata") or {}).get("subscription_id") or "") == str(
+                subscription_id
+            ):
+                return dict(row), "subscription_id"
+
+    external_customer_id = payload.get("customer_id")
+    if external_customer_id:
+        customer = (
+            supabase_client.table("customers")
+            .select("id")
+            .eq("merchant_id", merchant_id)
+            .eq("external_id", str(external_customer_id))
+            .limit(1)
+            .execute()
+        )
+        if customer.data:
+            # Oldest active case first. A customer with two open cases and one
+            # payment is genuinely ambiguous, and the oldest is the one that has
+            # been waiting longest — the audit row records that this route was
+            # used, so the guess is visible rather than silent.
+            found = (
+                supabase_client.table("recovery_cases")
+                .select("*")
+                .eq("merchant_id", merchant_id)
+                .eq("customer_id", customer.data[0]["id"])
+                .in_("status", _ACTIVE_STATUSES)
+                .order("opened_at", desc=False)
+                .limit(1)
+                .execute()
+            )
+            if found.data:
+                return dict(found.data[0]), "customer"
+
+    return None, ""
+
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -223,11 +423,22 @@ async def run_agent_loop(
             )
 
         # ── STEP 2: DIAGNOSE ───────────────────────────────────────────
-        # Gemini extracts the root cause; the playbook stub answers if it can't.
-        # The event and the customer row go in because the evidence lives there —
-        # the failure code on the payload, the recovery history on the customer.
+        # A causal graph reaches the conclusion; Gemini writes it up. The event
+        # and the customer row go in because the evidence lives there — the
+        # failure code on the payload, the recovery history on the customer.
+        #
+        # Whether the bank is currently degraded across the network is the one
+        # observable that needs a query, so it is established here and handed
+        # down. That keeps the graph traversal synchronous and free of I/O, and
+        # it is why the lookup returning None matters: "we could not check"
+        # leaves the node unobserved rather than asserting the bank is healthy.
         diagnosis = await run_diagnose(
-            case, playbook, supabase_client, event=event, customer=customer
+            case,
+            playbook,
+            supabase_client,
+            event=event,
+            customer=customer,
+            network_degraded=_network_degraded(supabase_client, case),
         )
         steps_completed.append(StepName.DIAGNOSE)
         await audit.log_diagnosis(
@@ -533,6 +744,17 @@ async def run_agent_loop(
             await _post_close_reward(supabase_client, case, final_status, trace_id)
 
         _mark_event_processed(supabase_client, event)
+
+        # Fold this case's diagnosis into the empirical edge counts, so the
+        # hand-written likelihoods in `causal_dag.definitions` can eventually be
+        # checked against what actually happened. Awaited rather than fired and
+        # forgotten — it is a handful of writes and the pass is over — but it
+        # swallows its own failures, because a statistics table must not be able
+        # to fail a recovery that has already happened.
+        if diagnosis is not None:
+            await update_dag_edges(
+                supabase_client, merchant_id, playbook, diagnosis.model_dump(mode="json")
+            )
 
         # The uplift model refits in the background once enough new outcomes
         # have landed. Fired after the pass is otherwise finished and never
@@ -865,7 +1087,8 @@ async def _get_or_create_case(
     except Exception as exc:  # noqa: BLE001
         logger.warning("existing_case_lookup_error", error=str(exc), trace_id=trace_id)
 
-    amount = extract_amount_at_risk(event.get("payload") or {}, event["event_type"])
+    payload = event.get("payload") or {}
+    amount = extract_amount_at_risk(payload, event["event_type"])
     now = datetime.now(UTC).isoformat()
     new_case = {
         "merchant_id": merchant_id,
@@ -877,6 +1100,10 @@ async def _get_or_create_case(
         "opened_at": now,
         "current_step": StepName.DETECT.value,
         "trigger_event_id": event["id"],
+        # The provider ids this case will need *after* the pass that opened it.
+        # Everything else stays on the trigger event: a second copy of the whole
+        # payload is a second thing that can drift from the first.
+        "metadata": _durable_identifiers(payload),
         "created_at": now,
         "updated_at": now,
     }
@@ -886,6 +1113,34 @@ async def _get_or_create_case(
     except Exception as exc:  # noqa: BLE001
         logger.error("case_creation_error", error=str(exc), trace_id=trace_id)
         return None
+
+
+#: Provider identifiers worth persisting onto the case row.
+#:
+#: `_enrich_case` puts the whole trigger payload on ``case["metadata"]`` for the
+#: duration of a pass, which is why the execute adapters can read
+#: ``subscription_id`` today. But a later webhook has no pass and no payload — it
+#: has a case row — and ``handle_terminal_event`` matches on exactly these. Before
+#: this the stored row carried no metadata at all, so a ``subscription.charged``
+#: could never be matched to the subscription case it settled.
+_DURABLE_ID_KEYS = (
+    "subscription_id",
+    "mandate_id",
+    "invoice_id",
+    "order_id",
+    "plan_id",
+    "payment_id",
+    "cart_id",
+    # Not identifiers, but the instrument the network aggregator reads back off
+    # closed cases — and it reads the row, not the event.
+    "bank",
+    "method",
+)
+
+
+def _durable_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """The subset of a trigger payload that outlives the pass that read it."""
+    return {key: payload[key] for key in _DURABLE_ID_KEYS if payload.get(key) not in (None, "")}
 
 
 async def _resolve_customer_id(
@@ -1072,6 +1327,39 @@ def mark_case_recovered(
         amount_cents=amount_at_risk_cents,
         trace_id=trace_id,
     )
+
+
+def _network_degraded(supabase_client: Any, case: dict[str, Any]) -> bool | None:
+    """Whether this case's instrument has an open network alert.
+
+    None on any failure, and None is load-bearing: it leaves the observable
+    unobserved, where False would assert the rail is healthy on the strength of
+    a query that did not run. The same table the guardrail blocks on, read the
+    same way — `bank.upper()` and `method.lower()`, because an alert stored in
+    any other case matches nothing.
+    """
+    if supabase_client is None:
+        return None
+    metadata = case.get("metadata") or {}
+    bank = str(metadata.get("bank") or "").strip()
+    method = str(metadata.get("method") or "").strip()
+    if not bank or not method:
+        return None
+
+    try:
+        resp = (
+            supabase_client.table("network_alerts")
+            .select("id")
+            .eq("affected_bank", bank.upper())
+            .eq("affected_method", method.lower())
+            .is_("resolved_at", "null")
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable network view is not a diagnosis failure
+        logger.warning("network_alert_lookup_failed", error=str(exc))
+        return None
+    return bool(getattr(resp, "data", None))
 
 
 def _mark_event_processed(supabase_client: Any, event: dict[str, Any]) -> None:

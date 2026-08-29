@@ -42,5 +42,31 @@ def get_user_supabase(
     return get_user_client(token)
 
 
+def get_optional_user_id(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> str | None:
+    """The caller's merchant id, or ``None`` when there is no usable token.
+
+    For endpoints with a second way to authenticate. The webhook receiver is the
+    only one: a real Razorpay call carries an HMAC signature and no bearer
+    token, while the simulator carries a token and no signature, and both are
+    legitimate. Requiring the token would reject Razorpay before the signature
+    was ever checked.
+
+    A *present but invalid* token returns ``None`` rather than raising, because
+    the endpoint's other authenticator may still succeed. The endpoint is then
+    responsible for rejecting a request that satisfied neither — which is a
+    decision it can make and this dependency cannot.
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        payload = verify_supabase_jwt(credentials.credentials)
+    except HTTPException:
+        return None
+    return str(payload["sub"])
+
+
 CurrentUserId = Annotated[str, Depends(get_current_user_id)]
+OptionalUserId = Annotated[str | None, Depends(get_optional_user_id)]
 UserSupabase = Annotated[Client, Depends(get_user_supabase)]

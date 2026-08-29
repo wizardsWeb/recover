@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import { ApiError, onboardMerchant } from "@/lib/api/client";
 import type { Vertical } from "@/lib/supabase/types";
 import { VERTICALS } from "@/lib/verticals";
@@ -56,7 +57,7 @@ export function OnboardingForm({ initialName }: OnboardingFormProps) {
   if (step === 1) {
     return (
       <form onSubmit={onNameSubmit} className="grid gap-4">
-        <div className="grid gap-2">
+        <StaggeredItem index={0} className="grid gap-2">
           <Label htmlFor="business-name">Business name</Label>
           <Input
             id="business-name"
@@ -68,11 +69,13 @@ export function OnboardingForm({ initialName }: OnboardingFormProps) {
             onChange={(event) => setName(event.target.value)}
           />
           <p className="text-xs text-ink-faint">This is the name customers will see in messages.</p>
-        </div>
+        </StaggeredItem>
 
-        <Button type="submit" disabled={!name.trim()} className="mt-2 w-full">
-          Continue
-        </Button>
+        <StaggeredItem index={1} className="mt-2">
+          <Button type="submit" disabled={!name.trim()} className="w-full">
+            Continue
+          </Button>
+        </StaggeredItem>
       </form>
     );
   }
@@ -83,19 +86,25 @@ export function OnboardingForm({ initialName }: OnboardingFormProps) {
         value={vertical}
         onValueChange={(value) => setVertical(value as Vertical)}
         aria-label="Vertical"
+        className="grid gap-2"
       >
-        {VERTICALS.map((entry) => (
-          <Label
-            key={entry.value}
-            htmlFor={entry.value}
-            className="flex cursor-pointer items-start gap-3 rounded-md border border-hairline p-3 transition-colors has-data-checked:border-brand has-data-checked:bg-brand-subtle"
-          >
-            <RadioGroupItem id={entry.value} value={entry.value} className="mt-0.5" />
-            <span className="grid gap-0.5">
-              <span className="text-sm font-medium text-ink">{entry.label}</span>
-              <span className="text-xs leading-relaxed text-ink-faint">{entry.hint}</span>
-            </span>
-          </Label>
+        {/* Wrapping each option rather than the group: the cascade should read
+            down the list of choices, which is the order they will be scanned in.
+            Base UI's RadioGroup keeps its roving focus through the wrapper — it
+            works off context rather than direct children. */}
+        {VERTICALS.map((entry, index) => (
+          <StaggeredItem key={entry.value} index={index}>
+            <Label
+              htmlFor={entry.value}
+              className="flex cursor-pointer items-start gap-3 rounded-md border border-hairline p-3 transition-colors has-data-checked:border-brand has-data-checked:bg-brand-subtle"
+            >
+              <RadioGroupItem id={entry.value} value={entry.value} className="mt-0.5" />
+              <span className="grid gap-0.5">
+                <span className="text-sm font-medium text-ink">{entry.label}</span>
+                <span className="text-xs leading-relaxed text-ink-faint">{entry.hint}</span>
+              </span>
+            </Label>
+          </StaggeredItem>
         ))}
       </RadioGroup>
 

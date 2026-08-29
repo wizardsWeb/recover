@@ -18,8 +18,8 @@ export default function CaseDetailLoading() {
           ))}
         </div>
         <div className="space-y-3">
-          <Skeleton className="h-40 w-full rounded-xl" />
-          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-40 w-full rounded-card" />
+          <Skeleton className="h-28 w-full rounded-card" />
         </div>
       </div>
     </div>

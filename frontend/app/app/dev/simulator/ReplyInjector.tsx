@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -159,12 +158,8 @@ export function ReplyInjector() {
         </div>
 
         <Button onClick={onInject} disabled={sending || !activeCaseId || !text.trim()}>
-          {sending ? (
-            <Spinner />
-          ) : (
-            <MessageSquarePlus className="size-4" strokeWidth={1.75} aria-hidden />
-          )}
-          Inject reply
+          <MessageSquarePlus className="size-4" strokeWidth={1.75} aria-hidden />
+          {sending ? "Injecting…" : "Inject reply"}
         </Button>
       </div>
     </Panel>

@@ -27,7 +27,7 @@ export default function CasesLoading() {
         <Skeleton className="h-4 w-40" />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-hairline bg-elevated">
+      <div className="overflow-x-auto rounded-card border border-hairline bg-elevated">
         <Table>
           <TableHeader>
             <TableRow className="border-hairline">

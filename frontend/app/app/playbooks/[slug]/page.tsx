@@ -1,28 +1,28 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Clock, IndianRupee, Layers, Percent } from "lucide-react";
 
-import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { CasesTable } from "@/components/domain/CasesTable";
+import { KpiCard } from "@/components/domain/KpiCard";
 import { PlaybookEmptyArms } from "@/components/empty-states/PlaybookEmptyArms";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { Badge } from "@/components/ui/badge";
+import { StaggerList } from "@/components/ui/StaggerList";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { BanditArmPosterior, PlaybookDetail } from "@/lib/api/playbooks";
 import { getBanditPosteriors, getPlaybook } from "@/lib/api/playbooks.server";
-import { formatINR, formatRelativeTime } from "@/lib/utils/format";
 
 export const metadata: Metadata = { title: "Playbook" };
 
 function armLabel(arm: string): string {
   return arm.replace(/_/g, " ");
-}
-
-function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div>
-      <div className="text-[10px] tracking-wide text-ink-faint uppercase">{label}</div>
-      <div className="mt-0.5 font-mono text-xl tabular-nums text-ink">{value}</div>
-      {note ? <div className="text-[10px] text-ink-faint">{note}</div> : null}
-    </div>
-  );
 }
 
 /**
@@ -40,13 +40,13 @@ function ArmRow({ arm }: { arm: BanditArmPosterior }) {
   const high = Math.round(arm.ci_high * 100);
 
   return (
-    <tr className="border-b border-hairline/60">
-      <td className="py-2 pr-3">
-        <span className={`text-xs ${cold ? "text-ink-faint italic" : "text-ink"}`}>
+    <TableRow className="border-hairline">
+      <TableCell className="px-3 py-2">
+        <span className={cold ? "text-xs text-ink-faint italic" : "text-xs text-ink"}>
           {armLabel(arm.arm_name)}
         </span>
-      </td>
-      <td className="w-[180px] py-2 pr-3">
+      </TableCell>
+      <TableCell className="w-[180px] px-3 py-2">
         <div className="relative h-1.5 w-full rounded-4xl bg-inset">
           {!cold ? (
             <>
@@ -61,19 +61,27 @@ function ArmRow({ arm }: { arm: BanditArmPosterior }) {
             </>
           ) : null}
         </div>
-      </td>
-      <td className="py-2 pr-3 text-right font-mono text-xs tabular-nums">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-right font-mono text-xs tabular-nums">
         {cold ? <span className="text-ink-faint italic">Cold start</span> : `${mean}%`}
-      </td>
-      <td className="py-2 pr-3 text-right font-mono text-xs tabular-nums text-ink-muted">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-right font-mono text-xs text-ink-muted tabular-nums">
         {arm.n_pulls}
-      </td>
-      <td className="py-2 text-right font-mono text-[10px] tabular-nums text-ink-faint">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-right font-mono text-[10px] text-ink-faint tabular-nums">
         {cold ? "—" : `${low}–${high}%`}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
+
+const ARM_COLUMNS = [
+  { label: "Arm", align: "left" as const },
+  { label: "Win rate", align: "left" as const },
+  { label: "Mean", align: "right" as const },
+  { label: "Pulls", align: "right" as const },
+  { label: "95% CI", align: "right" as const },
+];
 
 export default async function PlaybookDetailPage({
   params,
@@ -100,42 +108,61 @@ export default async function PlaybookDetailPage({
         subtitle={playbook.description}
         actions={
           playbook.enabled ? (
-            <span className="rounded-4xl bg-success-subtle px-2 py-0.5 text-xs font-medium text-success">
-              Active
-            </span>
+            <Badge className="bg-success-subtle text-success">Active</Badge>
           ) : (
-            <span className="rounded-4xl bg-warning-subtle px-2 py-0.5 text-xs font-medium text-warning">
-              Paused
-            </span>
+            <Badge className="bg-warning-subtle text-warning">Paused</Badge>
           )
         }
       />
 
-      <section className="grid grid-cols-2 gap-6 rounded-lg border border-hairline p-4 sm:grid-cols-4">
-        <Kpi label="Total cases" value={String(stats.totalCases)} />
-        <Kpi
-          label="Recovery rate"
-          value={stats.totalCases > 0 ? `${Math.round(stats.recoveryRate * 100)}%` : "—"}
-          note={stats.totalCases > 0 ? `${stats.casesRecovered} recovered` : "no cases yet"}
+      <StaggerList className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          staggered
+          label="Total cases"
+          value={stats.totalCases}
+          kind="count"
+          tone="info"
+          icon={Layers}
         />
-        <Kpi
-          label="Avg time to recovery"
-          value={
-            stats.avgHoursToRecovery != null ? `${stats.avgHoursToRecovery.toFixed(1)}h` : "—"
+        <KpiCard
+          staggered
+          label="Recovery rate"
+          value={stats.recoveryRate}
+          kind="percent"
+          tone="brand"
+          icon={Percent}
+          footnote={
+            // A rate over zero cases is not 0% — it is unmeasured. The footnote
+            // says which of the two this is rather than letting a bold 0%
+            // imply a playbook that tried and failed.
+            stats.totalCases > 0 ? `${stats.casesRecovered} recovered` : "no cases yet"
           }
         />
-        <Kpi
+        <KpiCard
+          staggered
+          label="Avg hours to recovery"
+          value={stats.avgHoursToRecovery ?? 0}
+          kind="count"
+          tone="success"
+          icon={Clock}
+          footnote={stats.avgHoursToRecovery == null ? "nothing recovered yet" : undefined}
+        />
+        <KpiCard
+          staggered
           label="Cost per recovery"
-          value="₹0"
+          value={0}
+          kind="inr"
+          tone="warning"
+          icon={IndianRupee}
           // Every send in this build is simulated. Showing a real-looking cost
           // would be the one number on the page that is invented.
-          note="sends are simulated"
+          footnote="sends are simulated"
         />
-      </section>
+      </StaggerList>
 
-      <section className="mt-6 space-y-3 rounded-lg border border-hairline p-4">
+      <section className="mt-6 space-y-3 rounded-card border border-hairline bg-elevated p-5 shadow-card">
         <div>
-          <h2 className="text-sm font-medium text-ink">Arms</h2>
+          <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">Arms</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
             What the bandit has learned about each action, across every context.
             The band is the 95% interval; the tick is the mean.
@@ -143,23 +170,28 @@ export default async function PlaybookDetailPage({
         </div>
 
         {arms.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-hairline text-[10px] tracking-wide text-ink-faint uppercase">
-                  <th scope="col" className="pb-2 text-left font-medium">Arm</th>
-                  <th scope="col" className="pb-2 text-left font-medium">Win rate</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Mean</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Pulls</th>
-                  <th scope="col" className="pb-2 text-right font-medium">95% CI</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="overflow-x-auto rounded-md border border-hairline">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  {ARM_COLUMNS.map((column) => (
+                    <TableHead
+                      key={column.label}
+                      className={`px-3 text-[10px] font-medium tracking-[0.06em] text-ink-faint uppercase ${
+                        column.align === "right" ? "text-right" : ""
+                      }`}
+                    >
+                      {column.label}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {arms.map((arm) => (
                   <ArmRow key={`${arm.arm_name}:${arm.context_bucket}`} arm={arm} />
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <PlaybookEmptyArms />
@@ -178,47 +210,17 @@ export default async function PlaybookDetailPage({
         </div>
       </section>
 
-      <section className="mt-6 space-y-3 rounded-lg border border-hairline p-4">
-        <h2 className="text-sm font-medium text-ink">Recent cases</h2>
+      <section className="mt-6 space-y-3">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          Recent cases
+        </h2>
 
         {playbook.recent_cases.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-hairline text-[10px] tracking-wide text-ink-faint uppercase">
-                  <th scope="col" className="pb-2 text-left font-medium">Customer</th>
-                  <th scope="col" className="pb-2 text-left font-medium">Status</th>
-                  <th scope="col" className="pb-2 text-right font-medium">At risk</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Opened</th>
-                </tr>
-              </thead>
-              <tbody>
-                {playbook.recent_cases.map((row) => (
-                  <tr key={row.id} className="border-b border-hairline/60">
-                    <td className="py-2">
-                      <Link
-                        href={`/app/cases/${row.id}`}
-                        className="text-ink transition-colors hover:text-brand"
-                      >
-                        {row.customers?.name ?? "Unknown"}
-                      </Link>
-                    </td>
-                    <td className="py-2">
-                      <CaseStatusBadge status={row.status} />
-                    </td>
-                    <td className="py-2 text-right font-mono tabular-nums text-ink-muted">
-                      {formatINR(row.amount_at_risk_cents)}
-                    </td>
-                    <td className="py-2 text-right text-ink-faint">
-                      {formatRelativeTime(row.opened_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          // The same table as the cases page. A playbook's cases are cases, and
+          // a second bespoke table here is a second place to fix a bug.
+          <CasesTable cases={playbook.recent_cases} />
         ) : (
-          <p className="py-4 text-center text-xs text-ink-faint">
+          <p className="rounded-card border border-hairline bg-elevated py-8 text-center text-xs text-ink-faint">
             No cases under this playbook yet.
           </p>
         )}

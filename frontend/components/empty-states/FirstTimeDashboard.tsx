@@ -19,7 +19,7 @@ export function FirstTimeDashboard() {
 
         {isLocal && (
           <div className="mt-8 flex max-w-md items-start gap-3 rounded-md border border-hairline bg-elevated px-4 py-3 text-left">
-            <Info className="mt-0.5 size-4 shrink-0 text-ink-blue" strokeWidth={1.75} aria-hidden />
+            <Info className="mt-0.5 size-4 shrink-0 text-gold" strokeWidth={1.75} aria-hidden />
             <p className="text-sm leading-relaxed text-ink-muted">
               Development mode. Fire a test scenario from the Simulator to see events flow
               through the system.{" "}

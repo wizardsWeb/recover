@@ -185,8 +185,12 @@ def _fire(
 def _payload_S1() -> dict[str, Any]:
     """The scripted S1 payload, exactly as scenarios.md shows it."""
     return build_subscription_charged_failed_event(
-        customer_external_id="cust_suresh_iyer",
-        subscription_id="sub_zenith_aarav_jee",
+        # Both read from settings, so pointing S1 at a real Razorpay subscription
+        # is an env var rather than an edit here. They must agree with the
+        # persona's own external_id or the webhook receiver cannot match a
+        # settlement back to the case — which is why both come from one place.
+        customer_external_id=fixtures.demo_customer_id(),
+        subscription_id=fixtures.demo_subscription_id(),
         amount_cents=299900,
         failure_reason="insufficient_funds",
         method="upi",
@@ -503,31 +507,43 @@ def fire_scenario_B3(supabase_client: Any, merchant_id: str, trace_id: str) -> d
 
 
 # ---------------------------------------------------------------------------
-# B1 / B2 — batch beats, not yet buildable
+# B1 / B2 — batch beats
 # ---------------------------------------------------------------------------
-
-_BATCH_DEFERRED = (
-    "Batch scenarios ship in Phase 11. They replay ~1,000 cases through a "
-    "trained bandit and a fitted uplift model, neither of which exists yet — "
-    "firing one now would draw a learning curve from nothing."
-)
 
 
 def fire_scenario_B1(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """B1 — batch bandit learning curve. Deferred to Phase 11.
+    """B1 — the bandit learning curve.
 
-    Writes nothing. A stub that quietly created rows would be worse than one
-    that refuses, because the chart it fed would look real.
+    Writes nothing itself. B1 is a thousand-case batch run, which is a
+    background job rather than a single event, so the API layer starts one and
+    returns its id — see `start_batch` in `app.api.simulator`. Firing it through
+    the scenario registry would mean blocking the request for the whole run.
     """
-    return {"case_id": None, "event_id": None, "scenario_code": "B1", "message": _BATCH_DEFERRED}
+    return {
+        "case_id": None,
+        "event_id": None,
+        "scenario_code": "B1",
+        "message": "Starting a 1,000-case batch run. Watch /app/batch for the curve.",
+    }
 
 
 def fire_scenario_B2(supabase_client: Any, merchant_id: str, trace_id: str) -> dict[str, Any]:
-    """B2 — uplift ROI panel. Deferred to Phase 11. Writes nothing."""
-    return {"case_id": None, "event_id": None, "scenario_code": "B2", "message": _BATCH_DEFERRED}
+    """B2 — the uplift ROI panel.
+
+    Also writes nothing: the numbers are computed on read from the holdout group
+    by `/api/analytics/uplift`. There is no event to fire, only a page to look
+    at, and manufacturing one would put a fabricated case behind a real figure.
+    """
+    return {
+        "case_id": None,
+        "event_id": None,
+        "scenario_code": "B2",
+        "message": "Uplift ROI is computed from resolved holdouts. See /app/roi.",
+    }
 
 
-#: Scenarios that are stubs — the API answers 202 for these instead of 200.
+#: Scenarios that produce no event of their own. The API answers 202 and points
+#: the caller at the thing that does the work.
 DEFERRED_SCENARIOS: frozenset[str] = frozenset({"B1", "B2"})
 
 ScenarioFn = Callable[[Any, str, str], dict[str, Any]]

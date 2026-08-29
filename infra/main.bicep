@@ -45,6 +45,9 @@ param supabaseAnonKey string
 @description('Overrides the frontend origin used for the backend CORS allowlist. Leave empty to use the Container App FQDN, which this template computes; set it when the frontend is behind a custom domain.')
 param frontendUrlHint string = ''
 
+@description('Merchant UUID a signature-verified Razorpay webhook is attributed to. A real Razorpay webhook carries no bearer token, so there is no JWT to read the merchant from; the receiver resolves it from the payload customer where it can and falls back to this. Not a secret — it is an identifier — so it is a parameter rather than a Key Vault entry.')
+param razorpayWebhookMerchantId string = ''
+
 var tags = {
   project: 'recover'
   environment: environment
@@ -159,14 +162,19 @@ resource kvRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 // genuinely secret ones are seeded as REPLACE_ME and set out of band, so no
 // real credential is ever in this repository or in a deployment history.
 //
-// The corollary, and it bites: **every deployment resets these three to
+// The corollary, and it bites: **every deployment resets all five to
 // REPLACE_ME.** That is the cost of keeping them out of the deployment history
 // — a `@secure()` param would survive redeploys but would put the value in the
 // ARM deployment record, which is the thing this design refuses. So after any
-// `az deployment group create`, re-run the three `az keyvault secret set`
+// `az deployment group create`, re-run the five `az keyvault secret set`
 // commands and restart the backend revision, or it will boot with placeholder
-// credentials: Supabase auth fails closed, and GEMINI_API_KEY being a
-// non-empty non-key means every LLM step quietly returns its fallback.
+// credentials: Supabase auth fails closed, GEMINI_API_KEY being a non-empty
+// non-key means every LLM step quietly returns its fallback, and a placeholder
+// Razorpay key means every adapter silently simulates while reporting itself as
+// simulated — which is at least honest, but is not a working integration.
+//
+// `az containerapp update --image` — which is all CI does — does *not* reset
+// them. Only a full template deployment does.
 resource kvSecretSupabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'supabase-url'
@@ -202,6 +210,36 @@ resource kvSecretSupabaseJwt 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
 resource kvSecretGeminiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'gemini-api-key'
+  properties: {
+    value: 'REPLACE_ME'
+  }
+}
+
+// Razorpay. The key id is public — it ships in every checkout page — but it
+// lives here anyway so all three rotate through one mechanism, and so that
+// nothing about the integration has to be edited in two places.
+resource kvSecretRazorpayKeyId 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'razorpay-key-id'
+  properties: {
+    value: 'REPLACE_ME'
+  }
+}
+
+resource kvSecretRazorpayKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'razorpay-key-secret'
+  properties: {
+    value: 'REPLACE_ME'
+  }
+}
+
+// Separate from the API secret on purpose: this one authenticates inbound
+// webhooks and that one authorises outbound calls, and they rotate
+// independently.
+resource kvSecretRazorpayWebhookSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'razorpay-webhook-secret'
   properties: {
     value: 'REPLACE_ME'
   }
@@ -301,6 +339,21 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: kvSecretGeminiKey.properties.secretUri
           identity: backendUAMI.id
         }
+        {
+          name: 'razorpay-key-id'
+          keyVaultUrl: kvSecretRazorpayKeyId.properties.secretUri
+          identity: backendUAMI.id
+        }
+        {
+          name: 'razorpay-key-secret'
+          keyVaultUrl: kvSecretRazorpayKeySecret.properties.secretUri
+          identity: backendUAMI.id
+        }
+        {
+          name: 'razorpay-webhook-secret'
+          keyVaultUrl: kvSecretRazorpayWebhookSecret.properties.secretUri
+          identity: backendUAMI.id
+        }
       ]
     }
     template: {
@@ -348,6 +401,25 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'GEMINI_API_KEY'
               secretRef: 'gemini-api-key'
+            }
+            // The app accepts either spelling for the two keys; these are the
+            // names used in .env, kept the same here so there is one convention
+            // to remember rather than two.
+            {
+              name: 'RAZORPAY_TEST_API_KEY'
+              secretRef: 'razorpay-key-id'
+            }
+            {
+              name: 'RAZORPAY_TEST_KEY_SECRET'
+              secretRef: 'razorpay-key-secret'
+            }
+            {
+              name: 'RAZORPAY_WEBHOOK_SECRET'
+              secretRef: 'razorpay-webhook-secret'
+            }
+            {
+              name: 'RAZORPAY_WEBHOOK_MERCHANT_ID'
+              value: razorpayWebhookMerchantId
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

@@ -181,6 +181,10 @@ def _treated_samples(
         .select("id, status, is_holdout, closed_at")
         .eq("merchant_id", merchant_id)
         .eq("playbook", playbook)
+        # Batch-simulated cases carry no real outcome and would train the uplift
+        # model on invented ones — a model fitted on a simulation, then used to
+        # decide whether to contact actual customers.
+        .is_("metadata->>is_batch_synthetic", "null")
         .execute()
     )
     eligible = {

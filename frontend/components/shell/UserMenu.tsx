@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { createClient } from "@/lib/supabase/client";
 
 interface UserMenuProps {
@@ -40,18 +40,14 @@ export function UserMenu({ email, businessName }: UserMenuProps) {
     router.refresh();
   }
 
-  const initials = businessName.trim().slice(0, 2).toUpperCase() || "RC";
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="icon" aria-label="Account menu">
-            <Avatar className="size-7">
-              <AvatarFallback className="bg-brand-subtle text-xs font-medium text-brand">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            {/* Seeded on the email so the header and the rail show the same
+                face — the rail seeds on the same value for that reason. */}
+            <PersonAvatar seed={email || businessName} name={businessName} />
           </Button>
         }
       />
@@ -60,7 +56,7 @@ export function UserMenu({ email, businessName }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         <div className="px-2 py-1.5">
           <p className="truncate text-sm font-medium text-ink">{businessName}</p>
-          <p className="truncate text-xs text-ink-faint">{email}</p>
+          <p className="truncate font-mono text-xs text-ink-faint">{email}</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut} disabled={pending}>

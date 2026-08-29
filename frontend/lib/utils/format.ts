@@ -93,3 +93,36 @@ export function formatRelativeTime(value: Date | string | number, from: Date = n
 export function formatPercent(rate: number, fractionDigits = 1): string {
   return `${(rate * 100).toFixed(fractionDigits)}%`;
 }
+
+/**
+ * Format a figure that is already in **rupees**, not paise.
+ *
+ * Every money column in the database holds paise, so `formatINR` takes paise
+ * and that is the right default. The batch simulator is the one exception: its
+ * result object is denominated in rupees, because it never touches a money
+ * column — it is a simulation whose numbers exist only inside its own JSON.
+ * Passing one of those to `formatINR` would render a hundredth of the figure,
+ * which is wrong in a way that still looks plausible.
+ */
+export function formatRupees(rupees: number): string {
+  return formatINR(Math.round(rupees * 100));
+}
+
+/** Compact rupees for a dense tile, from a rupee figure: `"₹1.45L"`. */
+export function formatRupeesCompact(rupees: number): string {
+  return formatINRCompact(Math.round(rupees * 100));
+}
+
+const PLAIN_INR = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+
+/**
+ * Paise as grouped rupee digits with **no** currency symbol: `"1,45,000"`.
+ *
+ * The KPI tiles set the `₹` as its own element — smaller, and in the brand blue
+ * — so the glyph and the digits are two different typographic objects. Passing
+ * `formatINR` there would put a second, differently-sized rupee sign inside the
+ * number and there is no way to style it out of a formatted string.
+ */
+export function formatRupeeDigits(paise: number): string {
+  return PLAIN_INR.format(Math.round(paise / 100));
+}

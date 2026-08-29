@@ -118,6 +118,30 @@ _DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 
+#: Columns Postgres will refuse an insert without.
+#:
+#: The fake does not validate the schema in general — migrations are the
+#: schema's own test — but NOT NULL on a foreign key is the one omission that
+#: fails *silently* in this codebase, because several writers are deliberately
+#: non-fatal. A batch run that never set `customer_id` inserted a hundred rows
+#: here and zero in Postgres, reported success, and was only caught by probing
+#: the live database by hand.
+#:
+#: Only the columns whose absence a real insert rejects. Adding every NOT NULL
+#: column would turn this into a second copy of the schema to keep in step.
+_REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "recovery_cases": ("merchant_id", "customer_id", "playbook", "amount_at_risk_cents"),
+    "agent_decisions": ("case_id", "merchant_id", "step_number", "step_name"),
+    "execution_attempts": ("case_id", "merchant_id", "action_type", "adapter"),
+    "customer_replies": ("case_id", "merchant_id", "channel", "raw_text"),
+    "bandit_rewards": ("merchant_id", "case_id", "arm_name", "context_vector", "context_bucket"),
+    "uplift_holdouts": ("case_id", "merchant_id"),
+    "batch_runs": ("merchant_id", "n_cases"),
+    "causal_edge_updates": ("merchant_id", "playbook", "from_node", "to_node"),
+    "customers": ("merchant_id",),
+    "events": ("merchant_id", "event_type"),
+}
+
 #: Timestamp column each table orders by, filled in on insert.
 _TIMESTAMP_COLUMNS: dict[str, str] = {
     "events": "received_at",
@@ -256,7 +280,14 @@ class _Query:
         if "->>" in column:
             container, key = column.split("->>", 1)
             nested = row.get(container.strip()) or {}
-            return _json_text(nested.get(key.strip()) if isinstance(nested, dict) else None)
+            value = nested.get(key.strip()) if isinstance(nested, dict) else None
+            # A key that is absent, or present as JSON null, reads as SQL NULL —
+            # *not* as the text "null". The distinction is what makes
+            # `is.null` work: it is how a filter excludes rows that never had
+            # the key, which is how synthetic batch cases are kept out of every
+            # read that reports money. Rendering it as text instead matches
+            # nothing and silently disables the filter.
+            return None if value is None else _json_text(value)
         return row.get(column)
 
     def _matches(self, row: dict[str, Any]) -> bool:
@@ -309,8 +340,17 @@ class _Query:
             for item in payload:
                 existing = None
                 if self._on_conflict:
-                    key = self._on_conflict
-                    existing = next((row for row in rows if row.get(key) == item.get(key)), None)
+                    # PostgREST takes a comma-separated conflict target, and a
+                    # composite one is the normal case for reference tables.
+                    # Treating the whole string as a single column name would
+                    # compare None to None on every row and match the first —
+                    # so an upsert of forty nodes would overwrite one row forty
+                    # times and report success.
+                    keys = [key.strip() for key in self._on_conflict.split(",") if key.strip()]
+                    existing = next(
+                        (row for row in rows if all(row.get(key) == item.get(key) for key in keys)),
+                        None,
+                    )
                 if existing is not None:
                     existing.update(item)
                     written.append(dict(existing))
@@ -363,6 +403,24 @@ class FakeSupabase:
     def table(self, name: str) -> _Query:
         return _Query(self, name)
 
+    def rpc(self, name: str, params: dict[str, Any]) -> _Rpc:
+        """Dispatch to a Python re-implementation of a Postgres function.
+
+        The functions in ``supabase/migrations`` are real SQL and cannot run
+        here, so each one the app calls needs a stand-in. Modelling the
+        *semantics* rather than raising means the tests exercise the code path
+        the deployment actually takes — a fake that raised would send every test
+        down the fallback branch and leave the RPC call itself untested.
+
+        An unknown function raises, which is what makes a new RPC that nobody
+        taught the fake about fail loudly here rather than silently in
+        production.
+        """
+        handler = _RPC_HANDLERS.get(name)
+        if handler is None:
+            raise KeyError(f"FakeSupabase has no stand-in for rpc({name!r})")
+        return _Rpc(lambda: handler(self, params))
+
     # -- storage ------------------------------------------------------------
 
     def rows(self, table: str) -> list[dict[str, Any]]:
@@ -381,6 +439,16 @@ class FakeSupabase:
         return (_EPOCH + timedelta(seconds=self._clock)).isoformat()
 
     def insert_row(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
+        missing = [column for column in _REQUIRED_COLUMNS.get(table, ()) if row.get(column) is None]
+        if missing:
+            # Mirrors Postgres's 23502. Raised rather than logged, because the
+            # writers that would swallow it are exactly the ones this exists to
+            # catch — they report success having written nothing.
+            raise ValueError(
+                f'null value in column "{missing[0]}" of relation "{table}" '
+                f"violates not-null constraint"
+            )
+
         stamp = self._next_timestamp()
         stored: dict[str, Any] = {
             "id": str(uuid.uuid4()),
@@ -402,3 +470,67 @@ class FakeSupabase:
 
     def seed_merchant(self, merchant_id: str) -> None:
         self.rows("merchants").append({"id": merchant_id, "name": "Test Merchant"})
+
+
+class _Rpc:
+    """Defers a fake RPC until ``.execute()``, matching the client's shape."""
+
+    def __init__(self, run: Any) -> None:
+        self._run = run
+
+    def execute(self) -> _Result:
+        return _Result(self._run() or [])
+
+
+def _increment_bandit_posterior(
+    db: FakeSupabase, params: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """``increment_bandit_posterior`` from 20260115000000_atomic_posterior.sql.
+
+    Upsert on the table's UNIQUE tuple, incrementing rather than overwriting. The
+    atomicity the real function provides is a Postgres guarantee and is not
+    modelled — there is one thread here — but the arithmetic and the
+    insert-versus-update split are, which is what the tests assert on.
+    """
+    rows = db.rows("bandit_posteriors")
+    key = (
+        params["p_merchant_id"],
+        params["p_playbook"],
+        params["p_arm_name"],
+        params["p_context_bucket"],
+    )
+    alpha_inc = float(params["p_alpha_inc"])
+    beta_inc = float(params["p_beta_inc"])
+
+    for row in rows:
+        if (
+            row.get("merchant_id"),
+            row.get("playbook"),
+            row.get("arm_name"),
+            row.get("context_bucket"),
+        ) == key:
+            row["alpha"] = float(row.get("alpha", 1.0)) + alpha_inc
+            row["beta"] = float(row.get("beta", 1.0)) + beta_inc
+            row["n_pulls"] = int(row.get("n_pulls", 0)) + 1
+            return []
+
+    db.insert_row(
+        "bandit_posteriors",
+        {
+            "merchant_id": key[0],
+            "playbook": key[1],
+            "arm_name": key[2],
+            "context_bucket": key[3],
+            # The flat prior plus this observation, so a first success lands on
+            # Beta(2,1) rather than on nothing.
+            "alpha": 1.0 + alpha_inc,
+            "beta": 1.0 + beta_inc,
+            "n_pulls": 1,
+        },
+    )
+    return []
+
+
+_RPC_HANDLERS: dict[str, Any] = {
+    "increment_bandit_posterior": _increment_bandit_posterior,
+}

@@ -9,6 +9,8 @@ the wrong actions counted, a baseline that has voted on itself.
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
+
 from app.ml.network.aggregator import (
     DEFAULT_BASELINE_RATE,
     IST,
@@ -150,19 +152,39 @@ def test_rewards_are_pooled_as_trials_not_averaged_over_attempts() -> None:
 
 
 def test_the_hour_column_is_ist_not_utc() -> None:
-    """A UTC hour would smear a bank's 9am across five and a half wrong hours."""
+    """A UTC hour would smear a bank's 9am across five and a half wrong hours.
+
+    The window straddles the call rather than reading the clock once. Both the
+    aggregator and this assertion take their own `now`, so a suite that happens
+    to run across a boundary — 01:00:00 exactly — would otherwise fail on a
+    correct implementation, once an hour, for no reason anybody could reproduce.
+    """
     db = FakeSupabase()
     seed_attempts(db, wins=6, losses=4)
 
+    before = datetime.now(IST)
     aggregate_network_stats(db)
+    after = datetime.now(IST)
 
     row = db.rows("network_stats")[0]
-    assert row["hour_of_day"] == datetime.now(IST).hour
-    assert row["day_of_week"] == datetime.now(IST).weekday()
+    assert row["hour_of_day"] in {before.hour, after.hour}
+    assert row["day_of_week"] in {before.weekday(), after.weekday()}
+    # The point of the test: an IST hour, not a UTC one. They differ by five and
+    # a half hours, so a UTC read can only coincide on the half hour.
+    assert row["hour_of_day"] != datetime.now(UTC).hour or before.minute >= 30
 
 
 def test_a_second_poll_in_the_same_hour_replaces_rather_than_appends() -> None:
-    """Six overlapping rows an hour would have the baseline counting one retry six times."""
+    """Six overlapping rows an hour would have the baseline counting one retry six times.
+
+    Skipped in the last seconds of an hour: two polls either side of a boundary
+    *should* write two rows, so asserting one there would be asserting a bug.
+    The boundary case has its own test below, which pins the clock instead of
+    hoping for it.
+    """
+    if datetime.now(IST).minute == 59 and datetime.now(IST).second > 55:
+        pytest.skip("an hour boundary is about to fall between the two polls")
+
     db = FakeSupabase()
     seed_attempts(db, wins=6, losses=4)
     aggregate_network_stats(db)
@@ -275,3 +297,28 @@ def test_a_second_poll_replaces_even_in_the_first_minutes_of_an_hour() -> None:
 
     assert len(db.rows("network_stats")) == 1
     assert db.rows("network_stats")[0]["sample_size"] == 20
+
+
+def test_two_polls_either_side_of_an_hour_write_two_rows() -> None:
+    """The boundary the test above skips, pinned rather than waited for.
+
+    A new clock hour is a new cell — that is what keeps a week of history from
+    collapsing into 24 rows. Asserting it here is what lets the same-hour test
+    skip the boundary honestly instead of asserting a bug on a correct
+    implementation once an hour.
+    """
+    from app.ml.network.aggregator import _Cell, _write_cell
+
+    db = FakeSupabase()
+    key = ("SBI", "upi", 19, 0)
+    at_19_58 = datetime.now(UTC).replace(hour=19, minute=58, second=0, microsecond=0)
+    at_20_02 = at_19_58 + timedelta(minutes=4)
+
+    _write_cell(
+        db, key, _Cell(successes=6.0, trials=10.0), at_19_58 - timedelta(minutes=10), at_19_58
+    )
+    _write_cell(
+        db, key, _Cell(successes=9.0, trials=10.0), at_20_02 - timedelta(minutes=10), at_20_02
+    )
+
+    assert len(db.rows("network_stats")) == 2

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Spinner } from "@/components/ui/spinner";
 import { ApiError } from "@/lib/api/client";
 import { fireScenario, getFixtureStatus, type FixtureStatus, type ScenarioMeta } from "@/lib/api/simulator";
 import { Panel, useSimulatorRefresh } from "./SimulatorPanels";
@@ -165,8 +164,8 @@ export function ScenarioRunner() {
         )}
 
         <Button onClick={onFire} disabled={!scenario || firing || (!status?.loaded && !scenario?.deferred)}>
-          {firing ? <Spinner /> : <Play className="size-4" strokeWidth={1.75} aria-hidden />}
-          Fire scenario
+          <Play className="size-4" strokeWidth={1.75} aria-hidden />
+          {firing ? "Firing…" : "Fire scenario"}
         </Button>
       </div>
     </Panel>

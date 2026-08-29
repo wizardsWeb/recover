@@ -1,24 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 
-import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
-import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
-import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
+import { CasesTable } from "@/components/domain/CasesTable";
 import { PageHeader } from "@/components/shell/PageHeader";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { fetchCases, type CaseListItem } from "@/lib/api/cases";
 import { useRealtimeCases } from "@/lib/hooks/useRealtimeCases";
-import { formatINR, formatRelativeTime } from "@/lib/utils/format";
 
 const FLASH_MS = 1500;
 
@@ -101,103 +88,7 @@ export function CasesRealtimeUpdater({
   return (
     <>
       {header}
-      <div className="overflow-x-auto rounded-xl border border-hairline bg-elevated">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-hairline">
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Status
-              </TableHead>
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Uplift
-              </TableHead>
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Customer
-              </TableHead>
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Playbook
-              </TableHead>
-              <TableHead className="text-right text-xs font-medium text-ink-faint">
-                At Risk
-              </TableHead>
-              <TableHead className="text-right text-xs font-medium text-ink-faint">
-                Recovered
-              </TableHead>
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Opened
-              </TableHead>
-              <TableHead className="text-xs font-medium text-ink-faint">
-                Step
-              </TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {cases.map((row) => (
-              <TableRow
-                key={row.id}
-                className={`border-hairline transition-colors duration-150 hover:bg-subtle ${
-                  flashing.has(row.id) ? "animate-row-flash" : ""
-                }`}
-              >
-                <TableCell>
-                  <CaseStatusBadge status={row.status} />
-                </TableCell>
-                <TableCell>
-                  {/* Informational, never a control. The bucket explains what
-                    the agent expected to change by acting; it does not gate
-                    anything the merchant can do to this case. */}
-                  <UpliftBucketBadge bucket={row.uplift_bucket} />
-                </TableCell>
-                <TableCell className="text-sm font-medium text-ink">
-                  {/* The link lives on the name and the arrow rather than on the
-                    row: a `tr` cannot contain an anchor that covers it without
-                    breaking the table semantics screen readers rely on. */}
-                  <Link
-                    href={`/app/cases/${row.id}`}
-                    className="hover:underline"
-                  >
-                    {row.customers?.name ?? "—"}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <PlaybookBadge playbook={row.playbook} />
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-ink">
-                  {formatINR(row.amount_at_risk_cents)}
-                </TableCell>
-                <TableCell
-                  className={`text-right font-mono text-sm ${
-                    row.amount_recovered_cents > 0
-                      ? "text-success"
-                      : "text-ink-faint"
-                  }`}
-                >
-                  {row.amount_recovered_cents > 0
-                    ? formatINR(row.amount_recovered_cents)
-                    : "—"}
-                </TableCell>
-                <TableCell className="text-xs text-ink-faint">
-                  {formatRelativeTime(row.opened_at)}
-                </TableCell>
-                <TableCell>
-                  <span className="rounded bg-subtle px-2 py-0.5 font-mono text-xs text-ink-faint">
-                    {row.current_step ?? "—"}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Link
-                    href={`/app/cases/${row.id}`}
-                    aria-label={`Open case for ${row.customers?.name ?? "customer"}`}
-                  >
-                    <ArrowRight size={14} className="text-ink-faint" />
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <CasesTable cases={cases} variant="full" flashingIds={flashing} />
     </>
   );
 }

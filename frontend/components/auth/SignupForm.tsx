@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import { createClient } from "@/lib/supabase/client";
 
 export function SignupForm() {
@@ -27,10 +28,23 @@ export function SignupForm() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      // Lands in raw_user_meta_data, which the on_auth_user_created trigger
-      // reads to name the merchant row it creates. Onboarding can then
-      // pre-fill instead of asking twice.
-      options: trimmed ? { data: { name: trimmed } } : undefined,
+      options: {
+        // Where the confirmation email points. Sent explicitly rather than
+        // left to the project's Site URL: that setting is a single global
+        // value, so without this every environment's confirmation link goes
+        // wherever the dashboard happens to point — which is how a deployed
+        // sign-up ends up mailing people a localhost link.
+        //
+        // `window.location.origin` rather than NEXT_PUBLIC_APP_URL, because it
+        // is right by construction on localhost, on the deployed host, and on
+        // any preview build, with no env var to keep in step. The URL still
+        // has to be on the project's Redirect URLs allow-list.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        // Lands in raw_user_meta_data, which the on_auth_user_created trigger
+        // reads to name the merchant row it creates. Onboarding can then
+        // pre-fill instead of asking twice.
+        ...(trimmed ? { data: { name: trimmed } } : {}),
+      },
     });
 
     if (error) {
@@ -62,7 +76,7 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
-      <div className="grid gap-2">
+      <StaggeredItem index={0} className="grid gap-2">
         <Label htmlFor="name">Business name</Label>
         <Input
           id="name"
@@ -72,9 +86,9 @@ export function SignupForm() {
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-      </div>
+      </StaggeredItem>
 
-      <div className="grid gap-2">
+      <StaggeredItem index={1} className="grid gap-2">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -85,9 +99,9 @@ export function SignupForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-      </div>
+      </StaggeredItem>
 
-      <div className="grid gap-2">
+      <StaggeredItem index={2} className="grid gap-2">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
@@ -100,11 +114,13 @@ export function SignupForm() {
           onChange={(event) => setPassword(event.target.value)}
         />
         <p className="text-xs text-ink-faint">At least 8 characters.</p>
-      </div>
+      </StaggeredItem>
 
-      <Button type="submit" disabled={pending} className="mt-2 w-full">
-        {pending ? "Creating account…" : "Create account"}
-      </Button>
+      <StaggeredItem index={3} className="mt-2">
+        <Button type="submit" disabled={pending} className="w-full">
+          {pending ? "Creating account…" : "Create account"}
+        </Button>
+      </StaggeredItem>
     </form>
   );
 }

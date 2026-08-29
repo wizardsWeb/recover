@@ -7,6 +7,8 @@ interface WordmarkProps {
   /** Rendered as a link to `/` unless false. */
   href?: string | false;
   size?: "sm" | "md" | "lg";
+  /** Recolours the ledger rule — it sits on dark chrome as well as on paper. */
+  lineClassName?: string;
 }
 
 const SIZES = {
@@ -19,7 +21,7 @@ const SIZES = {
  * The Recover wordmark: the name in General Sans with a single gold rule under
  * the last letter — a ledger line, drawn once.
  */
-export function Wordmark({ className, href = "/", size = "md" }: WordmarkProps) {
+export function Wordmark({ className, href = "/", size = "md", lineClassName }: WordmarkProps) {
   const mark = (
     <span
       className={cn(
@@ -31,7 +33,7 @@ export function Wordmark({ className, href = "/", size = "md" }: WordmarkProps) 
       Recover
       <span
         aria-hidden
-        className="absolute -bottom-0.5 left-0 h-px w-full bg-brand-line opacity-70"
+        className={cn("absolute -bottom-0.5 left-0 h-px w-full bg-brand-line opacity-70", lineClassName)}
       />
     </span>
   );

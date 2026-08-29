@@ -15,6 +15,31 @@ EVENT_TYPE_TO_PLAYBOOK: dict[str, str] = {
     "invoice.overdue": "b2b_overdue",
 }
 
+#: Events that mean a case is *over*, not that one should open.
+#:
+#: Razorpay fires these when a customer actually pays — including when they pay
+#: a link the agent itself minted. Routing one to a playbook would open a fresh
+#: recovery case against a customer who has just settled, which is both wrong and
+#: the most annoying possible way to be wrong. ``process_event`` checks this set
+#: before it consults ``EVENT_TYPE_TO_PLAYBOOK``.
+#:
+#: ``payment_link.paid`` is here as well as the two the brief named: it is what
+#: Razorpay fires for a payment link specifically, and the agent's own recoveries
+#: are payment links.
+TERMINAL_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "payment.captured",
+        "subscription.charged",
+        "payment_link.paid",
+    }
+)
+
+
+def is_terminal_event(event_type: str) -> bool:
+    """Whether this event closes a case rather than opening one."""
+    return event_type in TERMINAL_EVENT_TYPES
+
+
 #: Payload keys that carry the money at stake, in the order the four event
 #: builders in ``app.simulator.event_generator`` emit them. ``checkout.abandoned``
 #: is the odd one out: a cart has a value, not an amount.

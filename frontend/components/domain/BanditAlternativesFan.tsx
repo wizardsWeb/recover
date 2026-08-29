@@ -1,8 +1,8 @@
 "use client";
 
-import { useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BanditAlternative } from "@/lib/api/cases";
 
 /**
@@ -31,24 +31,19 @@ interface Props {
   contextBucket: string | null;
 }
 
-/** Mount animation: bars grow from zero, staggered down the list. */
-const STAGGER_MS = 40;
+/**
+ * Seconds added per bar. The fan reads top to bottom, and 50ms is fast enough
+ * that six arms finish inside a third of a second — long enough to see the
+ * ranking sweep out, short enough that nobody waits for it.
+ */
+const STAGGER = 0.05;
 
 function armLabel(arm: string): string {
   return arm.replace(/_/g, " ");
 }
 
 export function BanditAlternativesFan({ alternatives, banditMode, contextBucket }: Props) {
-  const [mounted, setMounted] = useState(false);
   const prefersReducedMotion = useReducedMotion();
-
-  // One frame after mount, so the transition has a zero-width start state to
-  // animate away from. Setting the final width on the first paint would render
-  // the bars complete with no motion at all.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
 
   if (alternatives.length === 0) return null;
 
@@ -69,7 +64,14 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
             .join(" · ");
 
           return (
-            <div key={alt.arm_name} className="flex items-center gap-2" title={tooltip}>
+            // A real tooltip rather than `title`: what is in it — why this arm
+            // lost, what it drew this round, how much history it has — is the
+            // argument for the decision, and a native tooltip cannot be reached
+            // by keyboard at all.
+            <Tooltip key={alt.arm_name}>
+              <TooltipTrigger
+                render={<div className="flex items-center gap-2" tabIndex={tooltip ? 0 : -1} />}
+              >
               <span
                 className={`w-[110px] shrink-0 truncate xl:w-[180px] font-mono text-[11px] ${
                   alt.chosen ? "font-semibold text-ink" : "text-ink-faint"
@@ -78,23 +80,22 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
                 {armLabel(alt.arm_name)}
               </span>
 
+              {/* Framer drives the width rather than a CSS transition off a
+                  mounted flag: `initial` gives it the zero-width start state
+                  without a render pass whose only job is to be replaced one
+                  frame later. */}
               <div className="h-2 flex-1 overflow-hidden rounded-4xl bg-inset">
-                <div
+                <motion.div
                   className={`h-full min-w-[2px] rounded-4xl ${
-                    prefersReducedMotion ? "" : "transition-[width] duration-300 ease-out"
-                  } ${
-                    alt.chosen
-                      ? "bg-brand"
-                      : alt.is_cold
-                        ? "bg-hairline"
-                        : "bg-ink-faint/40"
+                    alt.chosen ? "bg-brand" : alt.is_cold ? "bg-hairline" : "bg-ink-faint/40"
                   }`}
-                  style={{
-                    width: mounted || prefersReducedMotion ? `${pct}%` : "0%",
-                    transitionDelay: prefersReducedMotion
-                      ? undefined
-                      : `${index * STAGGER_MS}ms`,
-                  }}
+                  initial={{ width: prefersReducedMotion ? `${pct}%` : 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={
+                    prefersReducedMotion
+                      ? { duration: 0 }
+                      : { duration: 0.4, ease: "easeOut", delay: index * STAGGER }
+                  }
                 />
               </div>
 
@@ -105,35 +106,64 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
               >
                 {alt.is_cold ? "—" : `${pct}%`}
               </span>
-            </div>
+              </TooltipTrigger>
+              {tooltip ? <TooltipContent>{tooltip}</TooltipContent> : null}
+            </Tooltip>
           );
         })}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
         {contextBucket ? (
-          <span
-            className="rounded-4xl bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
-            title="Arms are learned per context — bank, method, time of day, LTV band"
-          >
-            {contextBucket}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
+                />
+              }
+            >
+              {contextBucket}
+            </TooltipTrigger>
+            <TooltipContent>
+              Arms are learned per context — bank, method, time of day, LTV band
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
         {banditMode === "explore" ? (
-          <span
-            className="rounded-4xl bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
-            title="This arm's draw beat an arm with a higher mean — the pull buys information"
-          >
-            Explore
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
+                />
+              }
+            >
+              Explore
+            </TooltipTrigger>
+            <TooltipContent>
+              This arm&rsquo;s draw beat an arm with a higher mean — the pull buys information
+            </TooltipContent>
+          </Tooltip>
         ) : banditMode === "exploit" ? (
-          <span
-            className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
-            title="This arm has both the best draw and the standing evidence"
-          >
-            Exploit
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
+                />
+              }
+            >
+              Exploit
+            </TooltipTrigger>
+            <TooltipContent>
+              This arm has both the best draw and the standing evidence
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
         {ranked.some((alt) => alt.is_cold) ? (

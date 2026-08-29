@@ -306,3 +306,91 @@ Context:
 """
 
     return f"{_INSTRUCTIONS}\n{_FEW_SHOT}\nNOW DIAGNOSE THIS CASE.\n\n{context}"
+
+
+# ── Stage 2: annotating a conclusion the DAG already reached ───────────
+
+#: What the model is asked for once a causal DAG has done the inference.
+#:
+#: Deliberately missing `root_cause` and `posterior_probability`. Those are the
+#: graph's to state, and leaving them out of the schema is what makes that
+#: structural rather than a matter of the prompt being persuasive enough — a
+#: model that cannot emit a field cannot overrule it.
+ANNOTATE_SCHEMA: dict[str, Any] = {
+    "type": "OBJECT",
+    "properties": {
+        "supporting_evidence": {
+            "type": "ARRAY",
+            "description": (
+                "2-4 short sentences explaining, in a merchant's language, why the "
+                "stated cause fits the facts given. Quote the numbers in the context. "
+                "Never state a fact that is not present above."
+            ),
+            "items": {"type": "STRING"},
+        },
+        "risk_factors": {
+            "type": "ARRAY",
+            "description": (
+                "Anything that argues against the stated cause, or that would make "
+                "acting on it risky. Empty if there is nothing."
+            ),
+            "items": {"type": "STRING"},
+        },
+        "inferred_salary_date": {
+            "type": "STRING",
+            "description": (
+                "Day of month the customer's salary appears to land, as a number "
+                "1-31, if the recovery dates in the context imply one. Null otherwise."
+            ),
+            "nullable": True,
+        },
+    },
+    "required": ["supporting_evidence", "risk_factors"],
+    "propertyOrdering": ["supporting_evidence", "risk_factors", "inferred_salary_date"],
+}
+
+
+def build_annotate_prompt(
+    case: dict[str, Any],
+    customer: dict[str, Any] | None,
+    event: dict[str, Any] | None,
+    *,
+    root_cause: str,
+    posterior_probability: float,
+    observed_features: dict[str, bool],
+) -> str:
+    """Ask the model to explain a conclusion, not to reach one.
+
+    The inversion that makes this phase worth doing. Before, the model was asked
+    what caused the failure and how sure it was, and both answers were
+    unfalsifiable — a fluent invention reads exactly like a real inference. Here
+    the graph has already decided, from likelihoods written down where they can
+    be argued with, and the model is left the job it is actually reliable at:
+    turning a node id and a feature vector into a sentence a merchant recognises.
+
+    The features are listed with their truth values, including the false ones. A
+    model told only what fired will explain away anything, and the absence of a
+    mandate-revoked code is part of why the answer is what it is.
+    """
+    fired = sorted(name for name, seen in observed_features.items() if seen)
+    absent = sorted(name for name, seen in observed_features.items() if not seen)
+
+    return "\n".join(
+        [
+            build_diagnose_prompt(case, customer, event),
+            "",
+            "## Revised task",
+            "",
+            "A causal model has already diagnosed this case. Do NOT re-diagnose it and",
+            "do NOT contradict it. Your job is to explain its conclusion.",
+            "",
+            f"Diagnosed cause: {root_cause}",
+            f"Model confidence: {posterior_probability:.0%}",
+            f"Facts observed: {', '.join(fired) or 'none'}",
+            f"Facts checked and absent: {', '.join(absent) or 'none'}",
+            "",
+            "Write the supporting evidence a merchant would find convincing, using only",
+            "the context above. If something in the context argues against the diagnosed",
+            "cause, say so in risk_factors rather than leaving it out.",
+        ]
+    )

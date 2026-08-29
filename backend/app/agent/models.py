@@ -123,6 +123,17 @@ class DiagnosisResult(BaseModel):
     alternative_hypotheses: list[dict[str, Any]]
     risk_factors: list[str]
     inferred_salary_date: str | None = None
+    #: True when the posterior came from a causal-DAG traversal rather than from
+    #: the model alone. Drives the case detail's "Causal Reasoning" tab, which
+    #: has nothing to draw for a case diagnosed before Phase 12.
+    dag_traversal_used: bool = False
+    #: The boolean features the traversal ran on. Absent for LLM-only and
+    #: fallback diagnoses — and absent is not "all false", which is why the
+    #: edge recorder skips a case rather than counting one.
+    observed_features: dict[str, bool] = Field(default_factory=dict)
+    #: Which revision of the graph produced this. A posterior is only
+    #: interpretable against the table it came from.
+    dag_version: str | None = None
     is_stub: bool = True  # False once Phase 5 LLM is wired
 
 
@@ -211,7 +222,12 @@ class ExecutionResult(BaseModel):
     idempotency_key: str
     request_payload: dict[str, Any]
     response_payload: dict[str, Any]
-    simulated: bool = True  # False once real adapters wired (future phase)
+    #: Whether this attempt reached a real provider. Derived from the adapter's
+    #: own response, and it defaults to ``True`` on a missing flag because the
+    #: safe direction is under-claiming — an adapter that forgets to say gets
+    #: reported as simulated rather than borrowing the credibility of the real
+    #: Razorpay calls beside it.
+    simulated: bool = True
 
 
 class ReplyIntent(StrEnum):

@@ -17,6 +17,7 @@ and keeps snake_case in Python, so the frontend's types read the same as
 """
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 
@@ -25,7 +26,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from app.agent.causal_dag.seed import seed_causal_dag
 from app.agent.core import process_event
+from app.agent.playbooks import PLAYBOOK_CONFIGS
 from app.config import get_settings
 from app.db import get_redis_client, get_service_client
 from app.deps import CurrentUserId, UserSupabase
@@ -34,6 +37,7 @@ from app.ml.network.aggregator import IST, normalise_bank, normalise_method
 from app.ml.network.detector import publish_alert
 from app.ml.uplift.model import train_uplift_model
 from app.simulator import loader, reply_generator
+from app.simulator.batch import MAX_CASES, SECONDS_PER_CASE, run_batch
 from app.simulator.network_seed import DEFAULT_DAYS, MAX_DAYS, seed_network_stats
 from app.simulator.scenarios import (
     DEFERRED_SCENARIOS,
@@ -338,9 +342,14 @@ def fire_scenario(
     _require_onboarded_merchant(supabase, user_id)
 
     if normalised in DEFERRED_SCENARIOS:
-        # 202: the request was understood and accepted as well-formed, but the
-        # work is not implemented. Nothing is written.
+        # 202: accepted, but the work does not happen inside this request. B1
+        # starts a background batch and hands back its id in `case_id`, so the
+        # caller has something to subscribe to; B2 only points at a page, since
+        # its numbers are computed on read from the holdout group.
         result = SCENARIO_REGISTRY[normalised](supabase, user_id, _trace_id())
+        if normalised == "B1":
+            started = _start_batch_run(BatchStartRequest(), background_tasks, user_id, supabase)
+            result = {**result, "case_id": started.batch_id}
         response.status_code = status.HTTP_202_ACCEPTED
         return FireScenarioResponse.model_validate(result)
 
@@ -929,3 +938,239 @@ async def seed_network(
     )
     log.info("network_seed_requested", merchant_id=user_id, **summary)
     return NetworkSeedResponse(**summary)
+
+
+# ── Batch simulation (B1) ──────────────────────────────────────────────
+
+
+class BatchStartRequest(CamelModel):
+    n_cases: int = Field(default=1000, ge=50, le=MAX_CASES)
+    #: Optional override of the playbook mix. Weights are normalised, so they
+    #: need not sum to one.
+    playbook_distribution: dict[str, float] | None = Field(default=None)
+    #: Fixes the draw, so a rehearsed demo shows the same curve twice.
+    seed: int | None = Field(default=None)
+
+
+class BatchStartResponse(CamelModel):
+    batch_id: str
+    status: str
+    estimated_seconds: float
+
+
+class BatchRunResponse(CamelModel):
+    batch_id: str
+    status: str
+    n_cases: int
+    #: Null before the first progress tick; a partial `{progress: ...}` object
+    #: while running; the finished `BatchResult` once complete.
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+def _normalised_distribution(raw: dict[str, float] | None) -> dict[str, float] | None:
+    """Validate and normalise a caller-supplied playbook mix."""
+    if raw is None:
+        return None
+
+    unknown = set(raw) - set(PLAYBOOK_CONFIGS)
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown playbooks: {', '.join(sorted(unknown))}",
+        )
+    total = sum(weight for weight in raw.values() if weight > 0)
+    if total <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Playbook distribution must have at least one positive weight.",
+        )
+    return {name: weight / total for name, weight in raw.items() if weight > 0}
+
+
+async def _run_batch_to_completion(
+    batch_id: str,
+    merchant_id: str,
+    n_cases: int,
+    distribution: dict[str, float] | None,
+    seed: int | None,
+) -> None:
+    """Run the batch and record how it ended, whichever way that is.
+
+    A crashed run must leave `status = 'failed'` rather than `'running'`. The
+    frontend shows a progress bar for anything still running, so a row left in
+    that state is a spinner nobody can clear — worse than an error, because it
+    looks like work still happening.
+    """
+    service = get_service_client()
+    try:
+        result = await run_batch(
+            service,
+            merchant_id,
+            n_cases=n_cases,
+            playbook_distribution=distribution,
+            batch_id=batch_id,
+            seed=seed,
+        )
+        service.table("batch_runs").update(
+            {
+                "status": "completed",
+                "result": result.to_dict(),
+                "completed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        ).eq("id", batch_id).execute()
+        log.info("batch_run_completed", batch_id=batch_id, n_cases=n_cases)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("batch_run_failed", batch_id=batch_id, error=str(exc))
+        with contextlib.suppress(Exception):
+            service.table("batch_runs").update(
+                {
+                    "status": "failed",
+                    "error": str(exc)[:500],
+                    "completed_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            ).eq("id", batch_id).execute()
+
+
+def _start_batch_run(
+    payload: BatchStartRequest,
+    background_tasks: BackgroundTasks,
+    user_id: str,
+    supabase: Any,
+) -> BatchStartResponse:
+    """Insert the run row and queue the work.
+
+    Synchronous and separate from the route so the scenario endpoint — which is
+    a plain `def` — can start a batch for B1 without either duplicating this or
+    being rewritten as a coroutine.
+    """
+    distribution = _normalised_distribution(payload.playbook_distribution)
+
+    written = _rows(
+        supabase.table("batch_runs")
+        .insert(
+            {
+                "merchant_id": user_id,
+                "status": "running",
+                "n_cases": payload.n_cases,
+                "started_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        .execute()
+    )
+    if not written:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not start the batch run.",
+        )
+    batch_id = str(written[0]["id"])
+
+    background_tasks.add_task(
+        _run_batch_to_completion, batch_id, user_id, payload.n_cases, distribution, payload.seed
+    )
+    log.info("batch_run_started", batch_id=batch_id, merchant_id=user_id, n_cases=payload.n_cases)
+
+    return BatchStartResponse(
+        batch_id=batch_id,
+        status="running",
+        estimated_seconds=round(payload.n_cases * SECONDS_PER_CASE, 1),
+    )
+
+
+@router.post(
+    "/batch/start", response_model=BatchStartResponse, status_code=status.HTTP_202_ACCEPTED
+)
+async def start_batch(
+    payload: BatchStartRequest,
+    background_tasks: BackgroundTasks,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> BatchStartResponse:
+    """Kick off a batch run and return before any of it has happened.
+
+    202, not 200: the work is accepted, not done. The row is inserted through
+    the caller's own client so RLS decides whose run it is; everything after
+    that is the service role, because a background task outlives the request
+    whose token would have scoped it.
+    """
+    return _start_batch_run(payload, background_tasks, user_id, supabase)
+
+
+def _batch_response(row: dict[str, Any]) -> BatchRunResponse:
+    return BatchRunResponse(
+        batch_id=str(row["id"]),
+        status=str(row.get("status") or "running"),
+        n_cases=int(row.get("n_cases") or 0),
+        result=row.get("result"),
+        error=row.get("error"),
+        started_at=row.get("started_at"),
+        completed_at=row.get("completed_at"),
+    )
+
+
+@router.get("/batch/latest", response_model=BatchRunResponse)
+async def get_latest_batch(user_id: CurrentUserId, supabase: UserSupabase) -> BatchRunResponse:
+    """The most recent run, finished or not.
+
+    Declared before `/batch/{batch_id}` so the literal path wins the match —
+    otherwise "latest" is read as an id and the route 404s on a valid request.
+
+    Deliberately not "most recent *completed*": a page that skipped past a run
+    still in flight would show stale results beside a progress bar for the run
+    that is about to replace them.
+    """
+    rows = _rows(
+        supabase.table("batch_runs")
+        .select("*")
+        .eq("merchant_id", user_id)
+        .order("started_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No batch runs yet.",
+        )
+    return _batch_response(rows[0])
+
+
+@router.get("/batch/{batch_id}", response_model=BatchRunResponse)
+async def get_batch(
+    batch_id: str, user_id: CurrentUserId, supabase: UserSupabase
+) -> BatchRunResponse:
+    """One run by id. RLS decides whether it is the caller's to see."""
+    rows = _rows(supabase.table("batch_runs").select("*").eq("id", batch_id).limit(1).execute())
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown batch run.")
+    return _batch_response(rows[0])
+
+
+# ── Causal DAG definitions ─────────────────────────────────────────────
+
+
+class DagSeedResponse(CamelModel):
+    nodes: int
+    playbooks: list[str]
+    dag_version: str
+
+
+@router.post("/dag/seed", response_model=DagSeedResponse)
+async def seed_dag(user_id: CurrentUserId, supabase: UserSupabase) -> DagSeedResponse:
+    """Publish the causal graph definitions into `causal_dag`.
+
+    Service-role, like the network seeder and for the same reason: the table is
+    global reference data with no merchant column, so no RLS policy exists that
+    a user client could satisfy for a write.
+
+    The rows are a published copy, not the source. `definitions.py` is what the
+    agent reasons from and what the API serves, so a stale table degrades a SQL
+    query rather than a diagnosis.
+    """
+    summary = await asyncio.to_thread(seed_causal_dag, get_service_client())
+    log.info("dag_seed_requested", merchant_id=user_id, **summary)
+    return DagSeedResponse(**summary)

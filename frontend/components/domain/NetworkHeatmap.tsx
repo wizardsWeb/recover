@@ -22,6 +22,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HeatmapCell, HeatmapResponse } from "@/lib/api/network";
 import { fetchHeatmap } from "@/lib/api/network";
 import { formatPercent } from "@/lib/utils/format";
@@ -74,28 +76,60 @@ function hourLabel(hour: number): string {
   return hour < 12 ? `${hour}am` : `${hour - 12}pm`;
 }
 
+/**
+ * One bank-hour.
+ *
+ * The tooltip is a real `Tooltip` rather than a `title` attribute so it can
+ * carry three lines of structure and open on keyboard focus as well as hover.
+ * Its content is portalled and mounts only while open, so a 24-column grid does
+ * not pay for 120 popups it will never show — but the exact rate stays on the
+ * cell's `aria-label` regardless, because a tooltip a screen reader has to open
+ * is a tooltip most readers never hear.
+ */
 function Cell({ cell, bank, hour }: { cell: HeatmapCell | undefined; bank: string; hour: number }) {
   if (!cell) {
     return (
-      <td className="p-px">
-        <div
-          className="h-6 w-full rounded-[3px] border border-dashed border-hairline"
-          title={`${bank} · ${hourLabel(hour)} — no readings`}
-          aria-label={`${bank} at ${hourLabel(hour)}: no data`}
+    <td className="p-px">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <div
+              className="h-9 w-full rounded-[4px] border border-dashed border-hairline"
+              aria-label={`${bank} at ${hourLabel(hour)}: no data`}
+            />
+          }
         />
-      </td>
+        <TooltipContent>
+          {bank} · {hourLabel(hour)} — no readings
+        </TooltipContent>
+      </Tooltip>
+    </td>
     );
   }
 
   const band = bandFor(cell.success_rate);
   return (
     <td className="p-px">
-      <div
-        className="h-6 w-full rounded-[3px]"
-        style={{ background: fillFor(cell.success_rate) }}
-        title={`${bank} · ${hourLabel(hour)}\n${formatPercent(cell.success_rate)} success over ${cell.sample_size} retries\n${band.label}`}
-        aria-label={`${bank} at ${hourLabel(hour)}: ${formatPercent(cell.success_rate)} success, ${band.label}, ${cell.sample_size} retries`}
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            className="h-9 w-full rounded-[4px]"
+            style={{ background: fillFor(cell.success_rate) }}
+            aria-label={`${bank} at ${hourLabel(hour)}: ${formatPercent(cell.success_rate)} success, ${band.label}, ${cell.sample_size} retries`}
+          />
+        }
       />
+      <TooltipContent className="text-center">
+        <span className="block font-medium">
+          {bank} · {hourLabel(hour)}
+        </span>
+        <span className="block">
+          {formatPercent(cell.success_rate)} over {cell.sample_size} retries
+        </span>
+        <span className="block opacity-70">{band.label}</span>
+      </TooltipContent>
+    </Tooltip>
     </td>
   );
 }
@@ -117,17 +151,17 @@ export function NetworkHeatmap({ initial }: NetworkHeatmapProps) {
   useEffect(() => {
     let cancelled = false;
     startLoading(() => {
-      void fetchHeatmap(method ?? undefined)
-        .then((next) => {
-          if (!cancelled) setData(next);
-        })
-        .catch(() => {
-          // Keep the current grid. A blank heatmap on a transient failure reads
-          // as "the network went dark", which is a much stronger claim.
-        });
+    void fetchHeatmap(method ?? undefined)
+      .then((next) => {
+        if (!cancelled) setData(next);
+      })
+      .catch(() => {
+        // Keep the current grid. A blank heatmap on a transient failure reads
+        // as "the network went dark", which is a much stronger claim.
+      });
     });
     return () => {
-      cancelled = true;
+    cancelled = true;
     };
   }, [method]);
 
@@ -136,39 +170,37 @@ export function NetworkHeatmap({ initial }: NetworkHeatmapProps) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-ink">Success rate by bank and hour</h2>
+        <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          Success rate by bank and hour
+        </h2>
         {methods.length > 1 ? (
-          <div role="tablist" aria-label="Payment method" className="flex gap-1">
-            {[null, ...methods].map((value) => (
-              <button
-                key={value ?? "all"}
-                type="button"
-                role="tab"
-                aria-selected={method === value}
-                onClick={() => setMethod(value)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs transition-colors",
-                  method === value
-                    ? "bg-brand-subtle text-brand"
-                    : "text-ink-muted hover:bg-subtle hover:text-ink",
-                )}
-              >
-                {value === null ? "All" : (METHOD_LABELS[value] ?? value.toUpperCase())}
-              </button>
-            ))}
-          </div>
+          // shadcn Tabs rather than hand-rolled role="tablist" buttons: arrow-key
+          // roving focus, the correct aria wiring and the active indicator all
+          // come with it, and none of the three were here before.
+          <Tabs
+            value={method ?? "all"}
+            onValueChange={(next) => setMethod(next === "all" ? null : String(next))}
+          >
+            <TabsList>
+              {[null, ...methods].map((value) => (
+                <TabsTrigger key={value ?? "all"} value={value ?? "all"}>
+                  {value === null ? "All" : (METHOD_LABELS[value] ?? value.toUpperCase())}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         ) : null}
       </div>
 
       <div
         className={cn(
-          "relative overflow-x-auto rounded-lg border border-hairline bg-elevated p-3 transition-opacity",
+          "relative overflow-x-auto rounded-card border border-hairline bg-elevated p-3 shadow-card transition-opacity",
           loading && "opacity-60",
         )}
       >
         {data.is_sparse ? (
           <p
-            className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-medium tracking-wide text-ink-faint uppercase opacity-50"
+            className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-medium tracking-[0.06em] text-ink-faint uppercase opacity-50"
             aria-hidden
           >
             Indicative — thin samples

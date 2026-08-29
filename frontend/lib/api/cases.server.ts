@@ -27,8 +27,13 @@ export function getCase(id: string): Promise<CaseDetail> {
   return serverRequest<CaseDetail>(`/api/cases/${id}`);
 }
 
-export function getAuditEvents(limit = 100): Promise<{ audit_events: AuditEvent[] }> {
-  return serverRequest<{ audit_events: AuditEvent[] }>(`/api/audit?limit=${limit}`);
+export function getAuditEvents(
+  limit = 100,
+  since?: string,
+): Promise<{ audit_events: AuditEvent[] }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (since) params.set("since", since);
+  return serverRequest<{ audit_events: AuditEvent[] }>(`/api/audit?${params}`);
 }
 
 export function getOverview(): Promise<Overview> {

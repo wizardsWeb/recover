@@ -18,6 +18,8 @@ from typing import Annotated, Any, cast
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.agent.causal_dag import traverse_dag
+from app.agent.causal_dag.definitions import DAG_VERSION, get_dag
 from app.agent.handoff import create_handoff_attempt
 from app.deps import CurrentUserId, UserSupabase
 from app.logging import get_logger
@@ -62,8 +64,14 @@ async def list_cases(
     playbook: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    include_synthetic: Annotated[bool, Query(alias="includeSynthetic")] = False,
 ) -> dict[str, Any]:
-    """Return a paginated list of cases for the current merchant, newest first."""
+    """Return a paginated list of cases for the current merchant, newest first.
+
+    Batch-simulated cases are hidden unless asked for. A thousand-case run would
+    otherwise bury every real case below a page of manufactured ones, and the
+    list is where a merchant goes to look at work the agent actually did.
+    """
     query = (
         supabase.table("recovery_cases")
         .select(_LIST_COLUMNS)
@@ -71,6 +79,8 @@ async def list_cases(
         .order("opened_at", desc=True)
         .range(offset, offset + limit - 1)
     )
+    if not include_synthetic:
+        query = query.is_("metadata->>is_batch_synthetic", "null")
     if status_filter:
         query = query.eq("status", status_filter)
     if playbook:
@@ -224,3 +234,93 @@ async def create_handoff(
 
     log.info("case_handoff_created", case_id=case_id, merchant_id=user_id, trace_id=trace_id)
     return {"case_id": case_id, "handoff": handoff, "trace_id": trace_id}
+
+
+@router.get("/{case_id}/dag")
+async def get_case_dag(
+    case_id: str,
+    user_id: CurrentUserId,
+    supabase: UserSupabase,
+) -> dict[str, Any]:
+    """The causal graph for this case's playbook, and the path taken through it.
+
+    Structure and traversal in one response. They are always rendered together —
+    a diagram with no highlighted path explains nothing, and a path with no
+    diagram to lay it over is a list of node ids — and splitting them would mean
+    two round trips whose answers can disagree about which DAG version they came
+    from.
+
+    Nodes and edges come from `definitions.py` rather than from the `causal_dag`
+    table, even though the seeder keeps that table current. The Python
+    definitions are what the traversal actually ran against, so serving anything
+    else could show a merchant a graph that does not explain their own case —
+    the seeded rows exist for inspection and for future work that would learn
+    from them, not as the source the UI reads.
+    """
+    case_resp = (
+        supabase.table("recovery_cases")
+        .select("id, playbook, diagnosis")
+        .eq("id", case_id)
+        .eq("merchant_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not case_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    case = _rows(case_resp)[0]
+
+    playbook = str(case.get("playbook") or "")
+    dag = get_dag(playbook)
+    if dag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No causal graph for playbook {playbook!r}.",
+        )
+
+    raw_diagnosis = case.get("diagnosis")
+    diagnosis: dict[str, Any] = raw_diagnosis if isinstance(raw_diagnosis, dict) else {}
+    raw_observed = diagnosis.get("observed_features")
+    observed: dict[str, bool] = raw_observed if isinstance(raw_observed, dict) else {}
+
+    # Re-run the traversal rather than reading the stored posteriors. The
+    # diagnosis row keeps the winner and its probability but not the full
+    # distribution, and the sidebar charts all of them. Recomputing from the
+    # stored features is deterministic, so it cannot disagree with what the
+    # agent concluded — and if it ever did, that would mean the graph changed
+    # under a closed case, which `dag_version` is there to make visible.
+    traversal = traverse_dag(playbook, observed) if observed else None
+
+    return {
+        "playbook": playbook,
+        "dag_version": DAG_VERSION,
+        "nodes": [
+            {
+                "node_id": node.node_id,
+                "node_type": node.node_type,
+                "label": node.label,
+                "description": node.description,
+                "prior_probability": node.prior_probability,
+                "base_rate": node.base_rate,
+            }
+            for node in dag.nodes
+        ],
+        "edges": [
+            {"from": edge.from_node, "to": edge.to_node, "likelihood": edge.likelihood}
+            for edge in dag.edges
+        ],
+        # Null for a case diagnosed before Phase 12, or by the model-led
+        # fallback. The tab is hidden in that state rather than rendering an
+        # unexplained graph with nothing lit up.
+        "traversal": (
+            {
+                "observed_features": observed,
+                "posteriors": traversal["posteriors"],
+                "causal_path": traversal["causal_path"],
+                "root_cause": traversal["root_cause"],
+                "posterior_probability": traversal["posterior_probability"],
+                "alternative_hypotheses": traversal["alternative_hypotheses"],
+            }
+            if traversal
+            else None
+        ),
+    }

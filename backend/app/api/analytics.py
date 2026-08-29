@@ -33,6 +33,16 @@ _BANDIT_SOURCE = "bandit"
 #: z for a two-sided 95% interval.
 _Z_95 = 1.96
 
+#: Cases manufactured by a batch simulation. Excluded from every read that
+#: reports money: a thousand fabricated recoveries would otherwise appear on the
+#: ROI page as revenue the agent earned, and there is no way for a reader to
+#: tell them apart from the real ones.
+#:
+#: `is.null` rather than `neq.true` on purpose. PostgREST's `neq` inherits SQL's
+#: three-valued logic, so it drops rows where the key is absent — which is every
+#: real case. The filter would then exclude exactly the rows it exists to keep.
+_SYNTHETIC_COLUMN = "metadata->>is_batch_synthetic"
+
 
 def _rows(result: Any) -> list[dict[str, Any]]:
     return cast(list[dict[str, Any]], result.data or [])
@@ -50,6 +60,7 @@ async def get_overview(
         supabase.table("recovery_cases")
         .select("id", count=CountMethod.exact)
         .eq("merchant_id", user_id)
+        .is_(_SYNTHETIC_COLUMN, "null")
         .gte("opened_at", today_start)
         .execute()
     )
@@ -58,6 +69,7 @@ async def get_overview(
         supabase.table("recovery_cases")
         .select("id", count=CountMethod.exact)
         .eq("merchant_id", user_id)
+        .is_(_SYNTHETIC_COLUMN, "null")
         .eq("status", "in_flight")
         .execute()
     )
@@ -66,6 +78,7 @@ async def get_overview(
         supabase.table("recovery_cases")
         .select("amount_at_risk_cents, amount_recovered_cents, status")
         .eq("merchant_id", user_id)
+        .is_(_SYNTHETIC_COLUMN, "null")
         .gte("opened_at", today_start)
         .execute()
     )
@@ -336,6 +349,7 @@ async def get_uplift_roi(
             "amount_at_risk_cents, amount_recovered_cents"
         )
         .eq("merchant_id", user_id)
+        .is_(_SYNTHETIC_COLUMN, "null")
     )
     if playbook:
         query = query.eq("playbook", playbook)
