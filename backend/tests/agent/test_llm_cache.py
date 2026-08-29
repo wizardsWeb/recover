@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 import app.agent.llm as llm_module
-from app.agent.llm import GeminiClient, prompt_hash
+from app.agent.llm import DEFAULT_MODEL, GeminiClient, prompt_hash
 from tests.simulator.fake_supabase import FakeSupabase
 
 SCHEMA: dict[str, Any] = {
@@ -107,7 +107,10 @@ async def test_cache_miss_calls_gemini_and_stores_the_response(
     assert len(rows) == 1
     assert rows[0]["prompt_hash"] == prompt_hash("t", "why did this fail?")
     assert rows[0]["response"] == ANSWER
-    assert rows[0]["model"] == "gemini-2.0-flash-exp"
+    # The constant, not a literal: this asserts the model is recorded on the
+    # row, and pinning the string here only means a model change fails a test
+    # about caching.
+    assert rows[0]["model"] == DEFAULT_MODEL
     assert rows[0]["input_tokens"] == 120
     assert rows[0]["output_tokens"] == 40
     # The preview is for debugging only — it must be the prompt, not the answer.
