@@ -145,19 +145,43 @@ recoveries, and a policy that started ahead would be one that never had to learn
 
 ## 6. Screenshots
 
-> Images live in [`docs/screenshots/`](docs/screenshots/) — see that folder's README for
-> the full list.
+> The full set is in [`docs/screenshots/`](docs/screenshots/) — 22 captures. These are
+> the ones that carry an argument.
+
+**The product**
 
 | | |
 | --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Cases](docs/screenshots/cases.png) |
-| **Dashboard** — recovery funnel, not a message count | **Cases** — every case with its uplift bucket |
-| ![Causal diagnosis](docs/screenshots/causal-dag.png) | ![Bandit](docs/screenshots/bandit.png) |
-| **Diagnosis** — root cause with its alternatives | **Decision** — the arms it passed over |
-| ![Batch](docs/screenshots/batch.png) | ![ROI](docs/screenshots/roi.png) |
-| **Batch** — bandit against a fixed rule | **ROI** — gross against incremental |
-| ![Network](docs/screenshots/network.png) | ![Audit](docs/screenshots/audit.png) |
-| **Network** — pooled bank health, live outage | **Audit** — every decision, append-only |
+| ![Landing](docs/screenshots/landing1.png) | ![Dashboard](docs/screenshots/dashboard1.png) |
+| The landing page | **Dashboard** — a recovery funnel, not a message count |
+
+**Every case, and what the agent decided**
+
+![Cases](docs/screenshots/cases1.png)
+
+The list carries the column most dashboards don't have. **Uplift** marks each customer
+*persuadable*, *sure thing*, *lost cause* or *do not disturb* — and the rows marked
+**Holdout** are the ones deliberately left untouched, which is what makes the ROI figure
+incremental rather than gross.
+
+| | |
+| --- | --- |
+| ![Causal diagnosis](docs/screenshots/cases4.png) | ![Bandit](docs/screenshots/bandit.png) |
+| **Diagnosis** — `mandate_revoked_by_customer` at 0.90 posterior, with its causal path, supporting evidence and the risk factors that argue against it | **Decision** — the arms the bandit passed over, with the confidence it had in each |
+| ![Guardrail](docs/screenshots/cases6.png) | ![Playbook](docs/screenshots/playbooks.png) |
+| **Guardrail** — nine named checks, each with a result and a reason. RBI retry limits, TRAI quiet hours, consent, network health | **Playbook** — every arm's win rate, pull count and interval. An 8% discount beats a 12% one |
+
+The remaining steps — detect, uplift check, execute, listen — are in
+[`cases2`–`cases7`](docs/screenshots/), which walk one case top to bottom.
+
+**The evidence**
+
+| | |
+| --- | --- |
+| ![ROI](docs/screenshots/roi.png) | ![Network](docs/screenshots/network.png) |
+| **ROI** — gross against incremental | **Network** — pooled bank health, live outage |
+| ![Audit](docs/screenshots/audit.png) | ![Simulator](docs/screenshots/simulator.png) |
+| **Audit** — every decision, append-only | **Simulator** — where the events come from |
 
 ---
 
@@ -186,9 +210,21 @@ Six layers, top to bottom:
 
 ## 8. Database
 
-Supabase Postgres. Schema in
-[`supabase/migrations/`](supabase/migrations/); **snapshots of the live database in
-[`docs/database/`](docs/database/)**.
+Supabase Postgres. Schema in [`supabase/migrations/`](supabase/migrations/); snapshots of
+the live project in [`docs/database/`](docs/database/).
+
+![Schema](docs/database/image2.png)
+
+Twenty tables and the relationships between them. Note `merchants.id` joining to
+`auth.users.id` on the right — a trigger creates the merchant row on signup, so a user and
+their tenant cannot drift apart.
+
+| | |
+| --- | --- |
+| ![Tables](docs/database/image3.png) | ![Functions](docs/database/image4.png) |
+| **Real rows, not an empty schema** — 836 recovery cases, 442 agent decisions, 255 bandit posteriors, 1,130 network stats, 195 uplift holdouts | **Functions** — `increment_bandit_posterior` updates the posterior atomically in Postgres; `rls_auto_enable` is an event trigger that turns row security on for any new table |
+| ![Triggers](docs/database/image5.png) | ![Project](docs/database/image.png) |
+| `set_updated_at` on every table | The live project — healthy, serving traffic |
 
 | Group | Tables |
 | --- | --- |
@@ -198,28 +234,32 @@ Supabase Postgres. Schema in
 | Network | `network_stats`, `network_alerts` |
 | Evidence | `audit_events`, `batch_runs`, `llm_cache` |
 
-Two things worth checking in those snapshots:
-
-- **RLS is on for every merchant-scoped table.** Tenant isolation is enforced by the
-  database, so a missing filter in application code cannot leak another merchant's data.
-- **`merchants.id` is `auth.users.id`.** A trigger creates the merchant row on signup, so
-  a user and their tenant cannot drift apart.
+**Row-level security is on for every merchant-scoped table**, and `rls_auto_enable`
+enforces that for tables added later. Tenant isolation is a database guarantee, not a
+`WHERE` clause someone has to remember.
 
 ---
 
 ## 9. Deployment
 
-Live on Azure Container Apps. **Screenshots in [`docs/deployment/`](docs/deployment/).**
+Live on Azure Container Apps, deployed by GitHub Actions on every push to `main`.
+Screenshots in [`docs/deployment/`](docs/deployment/).
 
-```
-push to main ──► GitHub Actions ──► build images ──► Container Registry ──► Container Apps
-                    (typecheck)                            │
-                                                      Key Vault ──► managed identity
-```
+![Azure resources](docs/deployment/image.png)
+
+Ten resources in one group: two Container Apps, their environment, a container registry,
+Key Vault, two managed identities, Log Analytics and Application Insights.
+
+| | |
+| --- | --- |
+| ![Pipeline](docs/deployment/image5.png) | ![Runs](docs/deployment/image4.png) |
+| **The pipeline** — build both images, deploy both apps, then verify. 3m30s end to end | **14 green runs**, every one a merge to `main` |
+| ![Container App](docs/deployment/image2.png) | ![Repo](docs/deployment/image3.png) |
+| The frontend app — running, East Asia | The repository |
 
 | Piece | What it does |
 | --- | --- |
-| Azure Container Apps | Frontend and backend, 1–3 replicas each |
+| Container Apps | Frontend and backend, 1–3 replicas each |
 | Container Registry | Holds both images |
 | Key Vault | Every secret, read at runtime through a **user-assigned managed identity** — no credentials in the repo or the images |
 | Log Analytics + App Insights | Logs and traces |
