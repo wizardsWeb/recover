@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "demo:record": "playwright test --project=demo"
+    "demo:record": "playwright test --project=demo",
+    "demo:capture": "bash scripts/capture-demo.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -39,6 +39,16 @@ import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  click,
+  installCursor,
+  moveTo,
+  scrollBy,
+  scrollToLocator,
+  settleCursor,
+  type as typeInto,
+} from "./lib/cinematics";
+
 interface DemoCase {
   case_id: string;
   merchant: string;
@@ -113,21 +123,24 @@ async function signIn(page: Page, slug: keyof DemoState["accounts"]): Promise<vo
   const account = state.accounts[slug as string];
   await go(page, "/login", 1200);
 
-  await page.getByLabel("Email").fill(account.email);
-  await page.waitForTimeout(250);
-  await page.getByLabel("Password").fill(account.password);
-  await page.waitForTimeout(400);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  // Typed rather than filled. `fill()` sets the value in one assignment, which
+  // on video looks like the text was pasted by a machine — which it was.
+  await typeInto(page, page.getByLabel("Email"), account.email, 42);
+  await typeInto(page, page.getByLabel("Password"), account.password, 42);
+  await click(page, page.getByRole("button", { name: /sign in/i }));
   await page.waitForURL((url) => url.pathname.startsWith("/app"), { timeout: 90_000 });
   await page.waitForTimeout(900);
+  await settleCursor(page);
 }
 
 /** Sign out through the header menu, so the video shows the tenant changing. */
 async function signOut(page: Page): Promise<void> {
-  await page.getByLabel("Account menu").click();
-  await page.waitForTimeout(800);
-  await page.getByRole("menuitem", { name: /sign out/i }).click();
+  await click(page, page.getByLabel("Account menu"));
+  await page.waitForTimeout(700);
+  await click(page, page.getByRole("menuitem", { name: /sign out/i }), 380);
   await page.waitForURL((url) => !url.pathname.startsWith("/app"), { timeout: 60_000 });
+  await page.waitForTimeout(600);
+  await settleCursor(page);
 }
 
 /**
@@ -142,6 +155,9 @@ async function signOut(page: Page): Promise<void> {
 async function go(page: Page, url: string, settleMs = 700): Promise<void> {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(settleMs);
+  // A full document load drops the injected cursor, so put it back where it was
+  // rather than letting it reappear in the corner between segments.
+  await settleCursor(page);
 }
 
 
@@ -162,32 +178,25 @@ async function openCase(page: Page, key: string): Promise<DemoCase> {
  */
 async function expandStep(page: Page, step: string): Promise<void> {
   const trigger = page.getByRole("button", { name: new RegExp(`^${step}`, "i") }).first();
-  await trigger.scrollIntoViewIfNeeded();
-  await trigger.hover();
-  await page.waitForTimeout(500);
-  await trigger.click();
-  await page.waitForTimeout(900);
+  await scrollToLocator(page, trigger, 700);
+  await click(page, trigger);
+  // Long enough for the panel's own open animation to finish before the beat
+  // that talks about what is inside it.
+  await page.waitForTimeout(850);
 }
 
 /**
- * Scroll to something, briefly, and carry on if it is not there.
+ * Scroll to something as an eased animation, and carry on if it is not there.
  *
- * The short timeout is the point. Playwright's default action timeout is 30
- * seconds, so a selector that never matches does not just fail — it silently
- * adds half a minute of dead video between two beats, and the narration timed
- * against those beats slides out from under the picture. Three seconds is long
- * enough for something present-but-lazy and short enough not to matter when the
- * guess was wrong.
+ * The short timeout inside `scrollToLocator` is the point: Playwright's default
+ * action timeout is 30 seconds, so a selector that never matches does not just
+ * fail — it silently adds half a minute of dead video between two beats, and the
+ * narration timed against them slides out from under the picture.
  */
 async function glideTo(page: Page, selector: string): Promise<void> {
-  try {
-    const target = page.locator(selector).first();
-    await target.waitFor({ state: "attached", timeout: 3000 });
-    await target.scrollIntoViewIfNeeded({ timeout: 3000 });
-  } catch {
-    console.log(`      (nothing matched ${selector} — skipped the scroll)`);
-  }
-  await page.waitForTimeout(700);
+  const found = await scrollToLocator(page, page.locator(selector).first(), 950);
+  if (!found) console.log(`      (nothing matched ${selector} — skipped the scroll)`);
+  await page.waitForTimeout(350);
 }
 
 /**
@@ -251,11 +260,33 @@ test("demo recording", async ({ page }) => {
   console.log(`Seeded ${state.generated_at}\n`);
 
   // ── SEGMENT 1 · the landing page ───────────────────────────────────
+  await installCursor(page);
   await go(page, "/", 1200);
+
+  // Where the page content actually sits on the physical screen, so an external
+  // capture can be cropped to exactly the viewport with no chrome and no
+  // guesswork about the height of the tab strip. `devicePixelRatio` matters:
+  // screen capture works in physical pixels, CSS coordinates do not.
+  const rect = await page.evaluate(() => ({
+    x: window.screenX,
+    y: window.screenY + (window.outerHeight - window.innerHeight),
+    width: window.innerWidth,
+    height: window.innerHeight,
+    dpr: window.devicePixelRatio,
+  }));
+  const rectFile = path.resolve(__dirname, "recordings/viewport.json");
+  fs.mkdirSync(path.dirname(rectFile), { recursive: true });
+  fs.writeFileSync(rectFile, `${JSON.stringify(rect, null, 2)}\n`);
+  console.log(
+    `  viewport on screen: ${rect.width}x${rect.height} at ${rect.x},${rect.y} (dpr ${rect.dpr})\n`,
+  );
+  // Drift in from off-centre so the first thing the viewer sees is a pointer
+  // that was already there, rather than one that pops into existence.
+  await moveTo(page, 660, 400, 900);
   await beat(page, 4, "S1 · landing hero");
-  await page.mouse.wheel(0, 500);
+  await scrollBy(page, 520, 1500);
   await beat(page, 4, "S1 · scroll into the pitch");
-  await page.mouse.wheel(0, 600);
+  await scrollBy(page, 620, 1500);
   await beat(page, 4, "S1 · how it works");
 
   // ── SEGMENT 2 · sign-up exists, then sign in ───────────────────────
@@ -412,7 +443,7 @@ test("demo recording", async ({ page }) => {
   // yet. Clicking a disabled tab is what failed the first two recordings.
   const testMode = page.getByRole("tab", { name: "Test mode" });
   if (await testMode.isVisible().catch(() => false)) {
-    await testMode.click();
+    await click(page, testMode);
     await beat(page, 7, "S17 · Razorpay test-mode credentials");
   } else {
     console.log("      (no Test mode tab — this build reports NEXT_PUBLIC_ENVIRONMENT=production)");

@@ -75,11 +75,27 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: VIEWPORT,
+        // Playwright's own recorder is a fallback, not the good take. It is
+        // hard-capped at 25fps — measured, not assumed: a 370-second run came
+        // out as exactly 9,256 frames — and it draws no cursor at all. For the
+        // final video, capture the headed window externally at 60fps and use
+        // this only to check the run completed.
         video: { mode: "on", size: VIEWPORT },
+        // Headed, because an external recorder needs a real window to point at.
+        headless: false,
         // A demo should show the product's own motion, so no reduced-motion
-        // override here even though it would make timings more repeatable.
+        // override, even though it would make timings more repeatable.
         launchOptions: {
-          args: ["--force-color-profile=srgb", "--font-render-hinting=none"],
+          args: [
+            "--force-color-profile=srgb",
+            "--font-render-hinting=none",
+            // Pinned so a crop filter can be written against a known rectangle.
+            "--window-position=0,0",
+            // Hides the "Chrome is being controlled by automated software"
+            // infobar, which is otherwise the first thing in frame.
+            "--disable-infobars",
+            "--hide-crash-restore-bubble",
+          ],
         },
       },
     },
