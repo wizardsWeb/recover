@@ -1,96 +1,162 @@
 "use client";
 
 import Link from "next/link";
+import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { LANDING_SECTIONS } from "@/components/marketing/landing-sections";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * The page's only chrome: a wordmark and an index, both fixed, both 15px.
+ * The floating nav pill.
  *
- * There is no header bar. Nothing has a background, a border, or a container —
- * the two corners sit directly on whatever the page is showing, which is what
- * lets the hero photograph run to all four edges.
+ * A deliberate exception to the rest of the system, and it opts out of three
+ * rules explicitly rather than by accident:
  *
- * **Why this is not `mix-blend-difference`.** That was the first attempt and it
- * is a trap. Difference blending is excellent against black or white and useless
- * against mid-grey: white over #808080 returns #7f7f7f, which is the backdrop.
- * The hero is a grey facade under an overcast sky — both mid-tones — so the
- * wordmark ghosted over the concrete and the index washed out over the cloud.
- * It measured as present and visible in the DOM while being unreadable on
- * screen, which is the worst kind of wrong.
+ *   * **Radius.** Every radius token is 0, so `rounded-full` and `rounded-lg`
+ *     are both square here. The pill uses an arbitrary `rounded-[999px]`, which
+ *     bypasses the theme entirely.
+ *   * **Shadow.** Every shadow token is `none`. The lift under the pill is an
+ *     arbitrary value for the same reason.
+ *   * **Weight.** Every weight utility resolves to 400. `font-nav` is the one
+ *     escape, and it exists because 15px white on near-black reads thinner than
+ *     the same size of ink on paper.
  *
- * So the chrome switches colour instead: white while a full-bleed photograph is
- * under it, ink over the white sections. Two states, each with real contrast,
- * decided by measurement rather than by a blend mode guessing. Every medium
- * carries a shallow top gradient so the white state holds even where the
- * photograph is bright.
+ * Those three exceptions are what make it a floating object rather than a band,
+ * and they are why it needs no scroll listener and no colour switching: it
+ * carries its own dark ground, so it is legible over a photograph, over white
+ * paper, and over the boundary between them. The version before this switched
+ * white-to-ink on scroll and was invisible twice — once over mid-grey concrete,
+ * once over the white sections.
  *
- * 15px, not the 13px the reference uses. That size works there because their
- * chrome sits over a consistently mid-dark render; here it sits over an overcast
- * sky, and at 13px weight 400 it read as a watermark rather than as navigation.
- * Two points is the difference between restraint and something a visitor cannot
- * find, and restraint that costs a reader the nav is not restraint.
+ * The circular mark is the only place `₹` appears in the chrome, in the one
+ * colour the product allows, on white. Everything else in the pill is white on
+ * near-black.
  */
 export function BureauChrome() {
   const activeId = useScrollSpy(LANDING_SECTIONS.map((section) => section.id));
-  const overMedia = useOverMedia();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // `Start` is the page's own call to action and is reachable from the Sign up
+  // button beside it, so it is not repeated as a link.
+  const links = LANDING_SECTIONS.filter((section) => section.id !== "start");
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-50">
-      <div
-        className={cn(
-          "flex items-start justify-between px-5 py-5 text-[15px] leading-[1.2] sm:px-7",
-          // No transition. The boundary this switches on is a hard edge — the
-          // hero photograph ends and white page begins — so a 300ms fade spends
-          // that time passing the text through the mid-greys that are
-          // unreadable against both. It also removes any state where the
-          // rendered colour disagrees with the class, which is what a paused
-          // transition in a throttled tab leaves behind.
-          // A shadow on the white state only. Over a photograph the scrim does
-          // most of the work, but the top-right corner of the hero is bright
-          // sky and 15px at weight 400 is thin — the shadow is what stops the
-          // strokes disappearing into a cloud. On the white sections ink needs
-          // nothing, and a shadow there would look like a mistake.
-          overMedia
-            ? "text-white [text-shadow:0_1px_16px_rgb(0_0_0/0.75)]"
-            : "text-ink",
-        )}
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-6">
+      <nav
+        aria-label="Main"
+        className="pointer-events-auto flex items-center gap-1 rounded-[999px] bg-[#0d0d0d] p-1.5 shadow-[0_10px_34px_rgb(0_0_0/0.22)] sm:gap-2"
       >
-        {/* Three lines, because the name alone does not say what this is and a
-            tagline in a sentence would be a tagline. Name, then category. */}
-        <Link href="/" className="pointer-events-auto">
-          <span className="block">Recover</span>
-          <span className="block">Revenue Recovery</span>
-          <span className="block">for Razorpay</span>
+        {/* The mark. A circle inside a pill, which is the shape the reference
+            uses — and the only round object left in the product. */}
+        <Link
+          href="/"
+          aria-label="Recover — home"
+          className="flex size-10 shrink-0 items-center justify-center rounded-[999px] bg-white transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+        >
+          <span aria-hidden className="font-nav text-[17px] leading-none text-rupee">
+            ₹
+          </span>
         </Link>
 
-        {/* Comma-separated, like an index line. The commas are rendered as
-            content rather than as separators so they inherit the link colour
-            and stay on the baseline. */}
-        <nav aria-label="Sections" className="pointer-events-auto hidden sm:block">
-          {LANDING_SECTIONS.map((section, index) => (
-            <span key={section.id}>
-              <a
-                href={`#${section.id}`}
-                aria-current={activeId === section.id ? "true" : undefined}
-                className={cn(
-                  "underline-offset-[0.25em] transition-opacity duration-200 hover:opacity-60",
-                  activeId === section.id ? "underline" : "no-underline",
-                )}
+        <ul className="hidden items-center md:flex">
+          {links.map((section) => {
+            const active = activeId === section.id;
+            return (
+              <li key={section.id}>
+                <a
+                  href={`#${section.id}`}
+                  aria-current={active ? "true" : undefined}
+                  className={cn(
+                    "block rounded-[999px] px-4 py-2 font-nav text-[15px] transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none",
+                    // Active is a fill rather than an underline. Inside a filled
+                    // pill an underline reads as a link that has been visited;
+                    // a lighter well reads as "you are here".
+                    active ? "bg-white/[0.14] text-white" : "text-white/65 hover:text-white",
+                  )}
+                >
+                  {section.label}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="ml-1 flex items-center gap-1 sm:gap-2">
+          <Link
+            href="/login"
+            className="rounded-[999px] px-3 py-2 font-nav text-[15px] whitespace-nowrap text-white/65 transition-colors duration-200 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none sm:px-4"
+          >
+            Log in
+          </Link>
+
+          {/* The one filled affordance on the page. It is white on near-black
+              inside a dark pill on a white page — three inversions deep, which
+              is what makes it the loudest thing in the chrome without being
+              large. */}
+          <Link
+            href="/signup"
+            className="rounded-[999px] bg-white px-4 py-2 font-nav text-[15px] whitespace-nowrap text-[#0d0d0d] transition-colors duration-200 hover:bg-white/85 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none sm:px-5"
+          >
+            Sign up
+          </Link>
+        </div>
+
+        {/* ---- Mobile ------------------------------------------------------
+            Below `md` the four labels do not fit beside the mark and two
+            buttons, so they move into a sheet. A pill that wraps to two lines
+            stops being a pill. */}
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Open menu"
+                className="flex size-10 shrink-0 items-center justify-center rounded-[999px] text-white/70 transition-colors duration-200 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none md:hidden"
               >
-                {section.label}
-              </a>
-              {index < LANDING_SECTIONS.length - 1 ? <span>,&nbsp;</span> : null}
-            </span>
-          ))}
-        </nav>
-
-        <Link href="/login" className="pointer-events-auto underline-offset-[0.25em] hover:underline sm:hidden">
-          Sign in
-        </Link>
-      </div>
+                <Menu className="size-5" strokeWidth={1.75} aria-hidden />
+              </button>
+            }
+          />
+          <SheetContent side="top" className="border-0 bg-[#0d0d0d] text-white">
+            <SheetHeader className="flex-row items-center justify-between">
+              <SheetTitle className="font-nav text-white">Recover</SheetTitle>
+              <SheetClose
+                render={
+                  <button
+                    type="button"
+                    aria-label="Close menu"
+                    className="rounded-[999px] p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <X className="size-5" strokeWidth={1.75} aria-hidden />
+                  </button>
+                }
+              />
+            </SheetHeader>
+            <ul className="flex flex-col gap-1 px-4 pb-6">
+              {links.map((section) => (
+                <li key={section.id}>
+                  <a
+                    href={`#${section.id}`}
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded-[999px] px-4 py-3 font-nav text-base text-white/75 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    {section.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </SheetContent>
+        </Sheet>
+      </nav>
     </div>
   );
 }
@@ -99,15 +165,15 @@ export function BureauChrome() {
  * Which section is in view.
  *
  * An `IntersectionObserver` rather than a scroll listener: the browser does the
- * geometry off the main thread, so this does not force a layout read on every
- * frame. The `rootMargin` shrinks the viewport to a band across its middle,
- * which is what makes "in view" mean the section being looked at rather than
- * every section currently touching the viewport.
+ * geometry off the main thread, so this does not force a layout read per frame.
+ * The `rootMargin` shrinks the viewport to a band across its middle, which makes
+ * "in view" mean the section being looked at rather than every section currently
+ * touching the viewport.
  */
 function useScrollSpy(ids: readonly string[]): string | null {
   const [activeId, setActiveId] = useState<string | null>(ids[0] ?? null);
-  // Serialised so the effect depends on a string rather than on an array
-  // identity, which changes every render and would rebuild the observer.
+  // Serialised so the effect depends on a string rather than an array identity,
+  // which changes every render and would rebuild the observer.
   const key = ids.join(",");
 
   useEffect(() => {
@@ -135,73 +201,4 @@ function useScrollSpy(ids: readonly string[]): string | null {
   }, [key]);
 
   return activeId;
-}
-
-
-/**
- * Whether a full-bleed photograph is currently under the chrome.
- *
- * This started as "is the hero under the chrome", which was too narrow by
- * exactly three sections: the page alternates type and plate, so ink chrome sat
- * over a photograph every time a plate scrolled under it. The question is not
- * which section is first, it is what is behind these two corners right now.
- *
- * Every full-bleed medium tags itself `data-chrome="over-media"`, so this works
- * regardless of how many plates there are or what order the page puts them in —
- * adding a section cannot silently break the chrome.
- *
- * Offsets are measured once and on resize rather than per frame: reading
- * `getBoundingClientRect` forces layout, and doing that on every scroll event is
- * the one thing here that would be expensive. `scrollY` is free.
- *
- * The handler sets state directly rather than coalescing through
- * `requestAnimationFrame`. That was the first version and it was wrong twice
- * over: rAF does not fire in a background tab, so the chrome kept whatever
- * colour it had when the tab was hidden and was wrong on return — and it made
- * the behaviour impossible to assert, because the state only advanced on a
- * painted frame. Reading a cached number and calling `setState` with an
- * unchanged value is a no-op React bails out of, so the coalescing bought
- * nothing it did not also break.
- */
-function useOverMedia(): boolean {
-  const [overMedia, setOverMedia] = useState(true);
-
-  useEffect(() => {
-    /** The band the wordmark and index actually occupy, plus a little slack. */
-    const CHROME_BAND = 80;
-    let bands: Array<[number, number]> = [];
-
-    const measure = () => {
-      bands = [...document.querySelectorAll<HTMLElement>('[data-chrome="over-media"]')].map(
-        (element) => {
-          const top = element.getBoundingClientRect().top + window.scrollY;
-          return [top, top + element.offsetHeight] as [number, number];
-        },
-      );
-    };
-
-    const read = () => {
-      const y = window.scrollY;
-      // The chrome is over a medium when that medium covers any part of the
-      // band. Both comparisons are needed: `top < y + BAND` alone would stay
-      // true for every medium already scrolled past.
-      setOverMedia(bands.some(([top, bottom]) => top < y + CHROME_BAND && bottom > y));
-    };
-
-    const onResize = () => {
-      measure();
-      read();
-    };
-
-    measure();
-    read();
-    window.addEventListener("scroll", read, { passive: true });
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("scroll", read);
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
-
-  return overMedia;
 }

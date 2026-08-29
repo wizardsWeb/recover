@@ -30,7 +30,11 @@ import "./globals.css";
 const interTight = Inter_Tight({
   subsets: ["latin"],
   variable: "--font-inter-tight",
-  weight: ["400"],
+  // 400 is the system. 500 exists for exactly one component — the floating nav
+  // pill — where 15px white on near-black at 400 reads thin. It is requested
+  // here rather than faked with a synthetic bold, and `font-nav` in globals.css
+  // is the only utility that can reach it.
+  weight: ["400", "500"],
   display: "swap",
 });
 

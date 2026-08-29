@@ -179,6 +179,13 @@
   --font-weight-extrabold: 400;
   --font-weight-black: 400;
 
+  /* The single exception, reachable only as `font-nav`. The nav pill is a dark
+     object floating on a light page — the one filled surface in the product —
+     and 15px white on near-black at 400 reads thin in a way it does not on
+     paper. Named for its one caller so a future `font-medium` cannot quietly
+     borrow it. */
+  --font-weight-nav: 500;
+
   /* ---- Radius: there is none --------------------------------------------- */
   --radius-none: 0px;
   --radius-xs: 0px;

@@ -40,16 +40,6 @@ export function Plate({
         priority={priority}
         className="object-cover"
       />
-      {/* The same 160px gradient the hero carries, for the same reason: the
-          chrome above turns white while a plate is under it, and two of these
-          three photographs are bright at the top. It is shallow enough to be
-          invisible against the frame and is the difference between navigation
-          that works and navigation that is technically present. */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/80 via-black/30 to-transparent"
-      />
-
       {caption ? (
         <figcaption className="absolute bottom-4 left-5 text-[13px] text-white/70 sm:left-7">
           {caption}

@@ -37,16 +37,6 @@ export function Hero() {
         className="object-cover"
       />
 
-      {/* 160px of gradient under the chrome. Every full-bleed medium on this
-          page carries the same one — see `Plate` — because the chrome turns
-          white whenever one is under it, and the top-right corner of this
-          photograph is bright overcast sky where 13px white text is
-          unreadable. */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/80 via-black/30 to-transparent"
-      />
-
       <div className="absolute inset-x-0 bottom-0 px-5 pb-8 sm:px-7 sm:pb-10">
         <h1 className="type-colossal max-w-[22ch] text-white [text-shadow:0_1px_40px_rgb(0_0_0/0.25)]">
           Every rupee
