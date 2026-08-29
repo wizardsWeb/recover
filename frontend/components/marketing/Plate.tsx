@@ -47,7 +47,7 @@ export function Plate({
           that works and navigation that is technically present. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/40 to-transparent"
+        className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/80 via-black/30 to-transparent"
       />
 
       {caption ? (

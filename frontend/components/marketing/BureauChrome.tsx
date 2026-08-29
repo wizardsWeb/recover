@@ -7,7 +7,7 @@ import { LANDING_SECTIONS } from "@/components/marketing/landing-sections";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * The page's only chrome: a wordmark and an index, both fixed, both 13px.
+ * The page's only chrome: a wordmark and an index, both fixed, both 15px.
  *
  * There is no header bar. Nothing has a background, a border, or a container —
  * the two corners sit directly on whatever the page is showing, which is what
@@ -26,6 +26,12 @@ import { cn } from "@/lib/utils/cn";
  * decided by measurement rather than by a blend mode guessing. Every medium
  * carries a shallow top gradient so the white state holds even where the
  * photograph is bright.
+ *
+ * 15px, not the 13px the reference uses. That size works there because their
+ * chrome sits over a consistently mid-dark render; here it sits over an overcast
+ * sky, and at 13px weight 400 it read as a watermark rather than as navigation.
+ * Two points is the difference between restraint and something a visitor cannot
+ * find, and restraint that costs a reader the nav is not restraint.
  */
 export function BureauChrome() {
   const activeId = useScrollSpy(LANDING_SECTIONS.map((section) => section.id));
@@ -35,14 +41,21 @@ export function BureauChrome() {
     <div className="pointer-events-none fixed inset-x-0 top-0 z-50">
       <div
         className={cn(
-          "flex items-start justify-between px-5 py-4 text-[13px] leading-[1.15] sm:px-7",
+          "flex items-start justify-between px-5 py-5 text-[15px] leading-[1.2] sm:px-7",
           // No transition. The boundary this switches on is a hard edge — the
           // hero photograph ends and white page begins — so a 300ms fade spends
           // that time passing the text through the mid-greys that are
           // unreadable against both. It also removes any state where the
           // rendered colour disagrees with the class, which is what a paused
           // transition in a throttled tab leaves behind.
-          overMedia ? "text-white" : "text-ink",
+          // A shadow on the white state only. Over a photograph the scrim does
+          // most of the work, but the top-right corner of the hero is bright
+          // sky and 15px at weight 400 is thin — the shadow is what stops the
+          // strokes disappearing into a cloud. On the white sections ink needs
+          // nothing, and a shadow there would look like a mistake.
+          overMedia
+            ? "text-white [text-shadow:0_1px_16px_rgb(0_0_0/0.75)]"
+            : "text-ink",
         )}
       >
         {/* Three lines, because the name alone does not say what this is and a
