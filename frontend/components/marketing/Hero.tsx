@@ -23,7 +23,11 @@ import { PLATES } from "@/lib/assets/images";
  */
 export function Hero() {
   return (
-    <section id="index" className="relative h-dvh w-full overflow-hidden bg-ink">
+    <section
+      id="index"
+      data-chrome="over-media"
+      className="relative h-dvh w-full overflow-hidden bg-ink"
+    >
       <Image
         src={PLATES.open.src}
         alt={PLATES.open.alt}
@@ -31,6 +35,16 @@ export function Hero() {
         sizes="100vw"
         priority
         className="object-cover"
+      />
+
+      {/* 160px of gradient under the chrome. Every full-bleed medium on this
+          page carries the same one — see `Plate` — because the chrome turns
+          white whenever one is under it, and the top-right corner of this
+          photograph is bright overcast sky where 13px white text is
+          unreadable. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/45 to-transparent"
       />
 
       <div className="absolute inset-x-0 bottom-0 px-5 pb-8 sm:px-7 sm:pb-10">
@@ -44,15 +58,17 @@ export function Hero() {
       {/* Bottom-right, in the gutter: the one number worth putting on a plate,
           and the denominator that makes it a measurement rather than a boast.
 
-          `mix-blend-difference`, the same technique the chrome uses, because
-          this corner of the plate is bright overcast sky — white text sat on it
-          at any opacity and vanished. Difference inverts it to near-black there
-          and back to white if the crop ever changes, so legibility does not
-          depend on which part of the photograph the viewport happens to show. */}
-      <p className="absolute right-5 bottom-8 hidden max-w-[24ch] text-right text-[13px] leading-[1.3] text-white mix-blend-difference sm:block sm:right-7 sm:bottom-10">
+          Ink, not white, because this corner of the photograph is bright
+          overcast sky while the headline's corner is dark concrete. Two text
+          colours on one plate is not an inconsistency — it is the page reading
+          its own image, and it is the only way both corners clear a contrast
+          floor without a second scrim. The white halo is insurance for the
+          narrower crops where `object-cover` slides some concrete under it. */}
+      <p className="absolute right-5 bottom-8 hidden max-w-[24ch] text-right text-[13px] leading-[1.3] text-ink [text-shadow:0_0_14px_rgb(255_255_255/0.7)] sm:block sm:right-7 sm:bottom-10">
         35.2% of at-risk revenue recovered across 1,000 simulated cases, measured against an
         untouched holdout.
       </p>
+
     </section>
   );
 }
