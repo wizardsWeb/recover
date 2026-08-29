@@ -36,6 +36,22 @@ os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("NETWORK_POLLER_ENABLED", "false")
 os.environ.setdefault("VERSION", "0.1.0")
 
+# Razorpay is switched off for the whole suite, and this is an assignment rather
+# than a `setdefault` on purpose. `backend/.env` holds real test-mode keys and is
+# read by pydantic-settings, but a process environment variable outranks the file
+# — so only an explicit empty value here can guarantee no test reaches the live
+# API. Without it the execution adapters would take their real branch and the
+# suite would mint payment links in someone's Razorpay account.
+#
+# The client wrapper and the signature verifier are covered by tests that build
+# their inputs directly, which is where that behaviour belongs anyway.
+os.environ["RAZORPAY_TEST_API_KEY"] = ""
+os.environ["RAZORPAY_TEST_KEY_SECRET"] = ""
+os.environ["RAZORPAY_KEY_ID"] = ""
+os.environ["RAZORPAY_KEY_SECRET"] = ""
+os.environ["RAZORPAY_WEBHOOK_SECRET"] = ""
+os.environ["RAZORPAY_WEBHOOK_MERCHANT_ID"] = ""
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
