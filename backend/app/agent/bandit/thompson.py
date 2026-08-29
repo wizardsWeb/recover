@@ -374,9 +374,72 @@ async def update_posterior(
     both. An arm with no row yet starts from the flat prior, so its first
     observation lands on Beta(2,1) or Beta(1,2) rather than on nothing.
 
+    The increment happens inside Postgres, through the
+    ``increment_bandit_posterior`` function. It used to be a read-modify-write
+    here, and that was a lost-update race: two cases closing in the same instant
+    both read the same alpha and both write the same alpha+1, so one observation
+    disappears. Nothing crashed and nothing was logged — the bandit just learned
+    more slowly the busier the merchant got, which is the hardest kind of bug to
+    notice. One statement in the database holds the row lock and the second
+    writer reads the first writer's value.
+
     Never raises: reward posting runs after a case has already closed, and an
     exception here would fail a pass whose useful work is already done.
     """
+    alpha_inc = 1.0 if reward > SUCCESS_THRESHOLD else 0.0
+    beta_inc = 0.0 if reward > SUCCESS_THRESHOLD else 1.0
+
+    try:
+        supabase_client.rpc(
+            "increment_bandit_posterior",
+            {
+                "p_merchant_id": merchant_id,
+                "p_playbook": playbook,
+                "p_arm_name": arm_name,
+                "p_context_bucket": context_bucket,
+                "p_alpha_inc": alpha_inc,
+                "p_beta_inc": beta_inc,
+            },
+        ).execute()
+        logger.info(
+            "bandit_posterior_updated",
+            arm=arm_name,
+            bucket=context_bucket,
+            alpha_inc=alpha_inc,
+            beta_inc=beta_inc,
+            reward=reward,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001 - learning must not break the loop
+        logger.warning(
+            "bandit_posterior_rpc_failed",
+            arm=arm_name,
+            error=str(exc),
+            hint=(
+                "Apply supabase/migrations/20260115000000_atomic_posterior.sql. "
+                "Falling back to the non-atomic read-modify-write."
+            ),
+        )
+
+    # The fallback exists because the alternative is worse. If the migration has
+    # not been applied to this project, an RPC-only implementation stops the
+    # bandit learning entirely and silently — a demo that looks fine and never
+    # converges. The racy path is a real degradation, which is why it logs a
+    # warning naming the migration every single time it is taken.
+    await _update_posterior_read_modify_write(
+        supabase_client, merchant_id, playbook, arm_name, context_bucket, reward
+    )
+
+
+async def _update_posterior_read_modify_write(
+    supabase_client: Any,
+    merchant_id: str,
+    playbook: str,
+    arm_name: str,
+    context_bucket: str,
+    reward: float,
+) -> None:
+    """The pre-Phase-13 path, kept only as a fallback. Loses concurrent updates."""
     try:
         current = await fetch_posteriors(
             supabase_client, merchant_id, playbook, context_bucket, [arm_name]
@@ -399,12 +462,12 @@ async def update_posterior(
             n_pulls=n_pulls + 1,
         )
         logger.info(
-            "bandit_posterior_updated",
+            "bandit_posterior_updated_non_atomic",
             arm=arm_name,
             bucket=context_bucket,
             alpha=alpha,
             beta=beta,
             reward=reward,
         )
-    except Exception as exc:  # noqa: BLE001 - learning must not break the loop
+    except Exception as exc:  # noqa: BLE001
         logger.warning("bandit_posterior_update_error", arm=arm_name, error=str(exc))

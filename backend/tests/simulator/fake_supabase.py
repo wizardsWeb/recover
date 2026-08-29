@@ -403,6 +403,24 @@ class FakeSupabase:
     def table(self, name: str) -> _Query:
         return _Query(self, name)
 
+    def rpc(self, name: str, params: dict[str, Any]) -> _Rpc:
+        """Dispatch to a Python re-implementation of a Postgres function.
+
+        The functions in ``supabase/migrations`` are real SQL and cannot run
+        here, so each one the app calls needs a stand-in. Modelling the
+        *semantics* rather than raising means the tests exercise the code path
+        the deployment actually takes — a fake that raised would send every test
+        down the fallback branch and leave the RPC call itself untested.
+
+        An unknown function raises, which is what makes a new RPC that nobody
+        taught the fake about fail loudly here rather than silently in
+        production.
+        """
+        handler = _RPC_HANDLERS.get(name)
+        if handler is None:
+            raise KeyError(f"FakeSupabase has no stand-in for rpc({name!r})")
+        return _Rpc(lambda: handler(self, params))
+
     # -- storage ------------------------------------------------------------
 
     def rows(self, table: str) -> list[dict[str, Any]]:
@@ -452,3 +470,67 @@ class FakeSupabase:
 
     def seed_merchant(self, merchant_id: str) -> None:
         self.rows("merchants").append({"id": merchant_id, "name": "Test Merchant"})
+
+
+class _Rpc:
+    """Defers a fake RPC until ``.execute()``, matching the client's shape."""
+
+    def __init__(self, run: Any) -> None:
+        self._run = run
+
+    def execute(self) -> _Result:
+        return _Result(self._run() or [])
+
+
+def _increment_bandit_posterior(
+    db: FakeSupabase, params: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """``increment_bandit_posterior`` from 20260115000000_atomic_posterior.sql.
+
+    Upsert on the table's UNIQUE tuple, incrementing rather than overwriting. The
+    atomicity the real function provides is a Postgres guarantee and is not
+    modelled — there is one thread here — but the arithmetic and the
+    insert-versus-update split are, which is what the tests assert on.
+    """
+    rows = db.rows("bandit_posteriors")
+    key = (
+        params["p_merchant_id"],
+        params["p_playbook"],
+        params["p_arm_name"],
+        params["p_context_bucket"],
+    )
+    alpha_inc = float(params["p_alpha_inc"])
+    beta_inc = float(params["p_beta_inc"])
+
+    for row in rows:
+        if (
+            row.get("merchant_id"),
+            row.get("playbook"),
+            row.get("arm_name"),
+            row.get("context_bucket"),
+        ) == key:
+            row["alpha"] = float(row.get("alpha", 1.0)) + alpha_inc
+            row["beta"] = float(row.get("beta", 1.0)) + beta_inc
+            row["n_pulls"] = int(row.get("n_pulls", 0)) + 1
+            return []
+
+    db.insert_row(
+        "bandit_posteriors",
+        {
+            "merchant_id": key[0],
+            "playbook": key[1],
+            "arm_name": key[2],
+            "context_bucket": key[3],
+            # The flat prior plus this observation, so a first success lands on
+            # Beta(2,1) rather than on nothing.
+            "alpha": 1.0 + alpha_inc,
+            "beta": 1.0 + beta_inc,
+            "n_pulls": 1,
+        },
+    )
+    return []
+
+
+_RPC_HANDLERS: dict[str, Any] = {
+    "increment_bandit_posterior": _increment_bandit_posterior,
+}
