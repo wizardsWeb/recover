@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 
 export function SignupForm() {
@@ -16,6 +17,9 @@ export function SignupForm() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  // See LoginForm: without this, a click before React attaches submits the
+  // form natively and puts the chosen password in the URL.
+  const hydrated = useHydrated();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,7 +120,7 @@ export function SignupForm() {
       </div>
 
       <div className="mt-2">
-        <Button type="submit" disabled={pending} className="w-full">
+        <Button type="submit" disabled={!hydrated || pending} className="w-full">
           {pending ? "Creating account…" : "Create account"}
         </Button>
       </div>
