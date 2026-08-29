@@ -22,7 +22,9 @@ import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { StaggeredItem } from "@/components/ui/StaggeredItem";
+import { Card, CardContent } from "@/components/ui/card";
+import { LiftCard } from "@/components/ui/LiftCard";
+import { StaggerList } from "@/components/ui/StaggerList";
 import type { BatchResult } from "@/lib/api/batch";
 import { formatPercent, formatRupees } from "@/lib/utils/format";
 
@@ -31,22 +33,28 @@ function Metric({
   value,
   note,
   tone,
-  index,
 }: {
   label: string;
   value: ReactNode;
   note: string;
   tone?: string;
-  index: number;
 }) {
   return (
-    <StaggeredItem index={index}>
-      <div className="rounded-lg border border-hairline p-4">
-        <div className="text-[10px] tracking-wide text-ink-faint uppercase">{label}</div>
-        <div className={`mt-1 font-mono text-2xl tabular-nums ${tone ?? "text-ink"}`}>{value}</div>
-        <div className="mt-1 text-xs leading-relaxed text-ink-muted">{note}</div>
-      </div>
-    </StaggeredItem>
+    <LiftCard staggered>
+      <Card className="h-full border-hairline shadow-card">
+        <CardContent className="p-5">
+          <p className="text-[11px] font-medium tracking-[0.06em] text-ink-faint uppercase">
+            {label}
+          </p>
+          <p
+            className={`mt-1.5 font-display text-3xl leading-none font-bold tracking-[-0.03em] tabular-nums ${tone ?? "text-ink"}`}
+          >
+            {value}
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-ink-muted">{note}</p>
+        </CardContent>
+      </Card>
+    </LiftCard>
   );
 }
 
@@ -54,10 +62,16 @@ function ComplianceStat({ label, value, note }: { label: string; value: string; 
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-lg tabular-nums text-success">{value}</span>
+        {/* The zero is the claim. It is set in the display face at 24px and in
+            the success colour because it is the number a merchant is being
+            asked to trust, and rendering it at the same weight as the note
+            beside it would bury the only structural guarantee on the page. */}
+        <span className="font-display text-2xl leading-none font-bold text-success tabular-nums">
+          {value}
+        </span>
         <span className="text-xs text-ink">{label}</span>
       </div>
-      <div className="mt-0.5 text-[11px] text-ink-muted">{note}</div>
+      <div className="mt-1 text-[11px] text-ink-muted">{note}</div>
     </div>
   );
 }
@@ -86,21 +100,18 @@ export function BatchResultsSummary({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <StaggerList className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Metric
-          index={0}
           label="Revenue at risk"
           value={formatRupees(result.total_at_risk_inr)}
           note={`Across ${result.total_cases.toLocaleString("en-IN")} cases in four playbooks.`}
         />
         <Metric
-          index={1}
           label="Gross recovered"
           value={formatRupees(result.gross_recovered_inr)}
           note={`${formatPercent(settled)} settled recovery rate, ${formatPercent(whole)} including the exploration it cost to get there.`}
         />
         <Metric
-          index={2}
           label="Incremental recovered"
           value={
             <AnimatedNumber
@@ -114,30 +125,27 @@ export function BatchResultsSummary({
           note={`${formatPercent(attribution)} of gross. The rest would have arrived without the agent.`}
         />
         <Metric
-          index={3}
           label="RBI violations"
           value="0"
           tone="text-success"
           note={`Checked before every send, so none can reach the data. ${blocks} sends were stopped.`}
         />
         <Metric
-          index={4}
           label="Opt-outs honoured"
           value={String(result.opt_outs_honored)}
           tone="text-success"
           note={`Contact stopped within ${compliance.avg_opt_out_response_seconds}s on average — a simulated constant.`}
         />
         <Metric
-          index={5}
           label="Cost of recovery"
           value={`₹${result.cost_per_100_inr_recovered.toFixed(2)}`}
           note="Spent on messages and handoffs per ₹100 recovered."
         />
-      </div>
+      </StaggerList>
 
-      <section className="rounded-lg border border-hairline p-4">
-        <h3 className="flex items-center gap-2 text-sm font-medium text-ink">
-          <ShieldCheck size={15} className="text-success" aria-hidden />
+      <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+        <h3 className="flex items-center gap-2 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          <ShieldCheck className="size-4 text-success" strokeWidth={1.75} aria-hidden />
           Compliance
         </h3>
 

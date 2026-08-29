@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { AuditLogEntry } from "@/components/domain/AuditLogEntry";
+import { AuditTable } from "@/components/domain/AuditTable";
 import { NoAuditEvents } from "@/components/empty-states/NoAuditEvents";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { StaggeredItem } from "@/components/ui/StaggeredItem";
 import type { AuditEvent } from "@/lib/api/cases";
 import { getAuditEvents } from "@/lib/api/cases.server";
 import { formatDateTime } from "@/lib/utils/format";
@@ -39,7 +38,7 @@ export default async function AuditPage({ searchParams }: PageProps<"/app/audit"
   return (
     <>
       <PageHeader
-        title="Audit Log"
+        title="Audit log"
         subtitle={
           scopedTo
             ? `Everything the agent did since ${formatDateTime(scopedTo)}`
@@ -56,21 +55,17 @@ export default async function AuditPage({ searchParams }: PageProps<"/app/audit"
           ) : undefined
         }
       />
-      <div className="mt-6 overflow-hidden rounded-xl border border-hairline bg-elevated">
+      <div className="mt-6">
         {failed ? (
-          <div className="py-12 text-center text-sm text-ink-muted">
+          <div className="rounded-card border border-hairline bg-elevated py-12 text-center text-sm text-ink-muted shadow-card">
             Could not load the audit trail. The API did not respond.
           </div>
         ) : events.length === 0 ? (
-          <NoAuditEvents />
-        ) : (
-          <div className="divide-y divide-hairline">
-            {events.map((entry, index) => (
-              <StaggeredItem key={entry.id} index={index} stagger={0.04}>
-                <AuditLogEntry entry={entry} />
-              </StaggeredItem>
-            ))}
+          <div className="overflow-hidden rounded-card border border-hairline bg-elevated shadow-card">
+            <NoAuditEvents />
           </div>
+        ) : (
+          <AuditTable events={events} />
         )}
       </div>
     </>

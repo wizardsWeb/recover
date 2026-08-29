@@ -61,6 +61,18 @@ export const LIST_ITEM: Variants = {
 };
 
 /**
+ * The card-grid variant: cards grow into place rather than sliding up.
+ *
+ * A 3% scale rather than an 8px rise, because a grid staggers in two dimensions
+ * — a uniform upward slide across a 2×2 makes the second row look like it is
+ * chasing the first, where a scale has no direction to disagree about.
+ */
+export const LIST_ITEM_SCALE: Variants = {
+  hidden: { opacity: 0, scale: 0.97 },
+  show: { opacity: 1, scale: 1 },
+};
+
+/**
  * The reduced-motion forms of everything above.
  *
  * `prefers-reduced-motion` does not mean "no feedback" — it means no travel.

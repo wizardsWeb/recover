@@ -21,8 +21,10 @@ import { toast } from "sonner";
 import { BatchLearningCurve } from "@/components/domain/BatchLearningCurve";
 import { BatchResultsSummary } from "@/components/domain/BatchResultsSummary";
 import { EmptyState } from "@/components/empty-states/EmptyState";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
 import type { BatchRun } from "@/lib/api/batch";
 import { fetchBatch, isComplete, isProgress, startBatch } from "@/lib/api/batch";
 import { useBatchRun } from "@/lib/hooks/useBatchRun";
@@ -48,42 +50,50 @@ function ProgressPanel({ run }: { run: BatchRun }) {
   const remaining = done > 0 ? Math.max(0, (elapsed / done) * (total - done)) : null;
 
   return (
-    <section className="space-y-4 rounded-lg border border-hairline p-5">
+    // The `dark` class rather than a hand-picked set of dark colours. Every
+    // token inside — including the Recharts axes, grid and tooltip, which read
+    // `--text-tertiary` and `--border-subtle` — flips to the dark palette in one
+    // move, so the live panel becomes a dark island on a light page with no
+    // second colour scheme to keep in agreement. In dark mode it simply reads as
+    // continuous with the page, which is correct: the panel is not trying to be
+    // dark, it is trying to be *the thing currently happening*.
+    <section className="dark space-y-4 rounded-card border border-hairline bg-base p-5 text-ink">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
-          <Spinner className="size-3.5" />
+        <h2 className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          {/* A pulsing dot rather than a spinner. A spinner says "waiting"; a
+              live indicator says "this is moving", which is the true statement
+              — the numbers underneath are changing while it is on screen. */}
+          <span aria-hidden className="flex size-2 shrink-0">
+            <span className="size-2 animate-pulse rounded-full bg-success" />
+          </span>
           Running {total.toLocaleString("en-IN")} cases
         </h2>
-        <span className="font-mono text-xs tabular-nums text-ink-muted">
+        <span className="font-mono text-xs text-ink-muted tabular-nums">
           {done.toLocaleString("en-IN")} / {total.toLocaleString("en-IN")}
           {remaining !== null ? ` · about ${Math.ceil(remaining)}s left` : null}
         </span>
       </div>
 
-      <div
-        className="h-1.5 overflow-hidden rounded-full bg-subtle"
-        role="progressbar"
-        aria-valuenow={Math.round(pct * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
+      <Progress
+        value={Math.round(pct * 100)}
+        className="block"
         aria-label="Batch simulation progress"
       >
-        <div
-          className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out"
-          style={{ width: `${Math.max(2, pct * 100)}%` }}
-        />
-      </div>
+        <ProgressTrack className="h-1.5 bg-subtle">
+          <ProgressIndicator className="rounded-full bg-brand" />
+        </ProgressTrack>
+      </Progress>
 
       {progress && progress.time_series.length > 0 ? (
-        <BatchLearningCurve
-          series={progress.time_series}
-          totalCases={total}
-          live
-        />
+        <BatchLearningCurve series={progress.time_series} totalCases={total} live />
       ) : (
-        <p className="py-8 text-center text-xs text-ink-faint">
-          Waiting for the first window of results…
-        </p>
+        // Skeleton rather than a spinner: the shape of what is coming is more
+        // informative than the fact that something is, and it holds the panel's
+        // height so the page does not jump when the first window lands.
+        <div className="space-y-2 py-2">
+          <Skeleton className="h-[280px] w-full" />
+          <Skeleton className="h-3 w-48" />
+        </div>
       )}
 
       {progress?.current_bandit_rate != null ? (
@@ -136,8 +146,8 @@ export function BatchRunner({ initial }: { initial: BatchRun | null }) {
         body="Simulates 1,000 recovery cases across all four playbooks, comparing the contextual bandit against the rule-based baseline on the same customers. Takes a few seconds."
         action={
           <Button onClick={begin} disabled={starting}>
-            {starting ? <Spinner className="size-3.5" /> : <Play size={14} />}
-            Run batch simulation
+            <Play aria-hidden />
+            {starting ? "Starting…" : "Run batch simulation"}
           </Button>
         }
       />
@@ -147,22 +157,22 @@ export function BatchRunner({ initial }: { initial: BatchRun | null }) {
   return (
     <div className="space-y-6">
       {failed ? (
-        <div className="flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-subtle p-4 text-danger">
-          <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
-          <div>
-            <p className="text-sm font-medium">The batch run failed</p>
-            <p className="mt-0.5 text-xs opacity-90">{run.error ?? "No reason recorded."}</p>
-          </div>
-        </div>
+        <Alert variant="destructive" className="rounded-card border-danger/30 bg-danger-subtle">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>The batch run failed</AlertTitle>
+          <AlertDescription className="text-xs text-current opacity-90">
+            {run.error ?? "No reason recorded."}
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {running ? <ProgressPanel run={run} /> : null}
 
       {completed ? (
         <>
-          <section className="space-y-4 rounded-lg border border-hairline p-5">
+          <section className="space-y-4 rounded-card border border-hairline bg-elevated p-5 shadow-card">
             <div>
-              <h2 className="text-sm font-medium text-ink">
+              <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
                 Bandit vs rule-based baseline —{" "}
                 {completed.total_cases.toLocaleString("en-IN")} cases
               </h2>
@@ -187,8 +197,8 @@ export function BatchRunner({ initial }: { initial: BatchRun | null }) {
       {!running ? (
         <div className="flex justify-end">
           <Button variant="outline" onClick={begin} disabled={starting}>
-            {starting ? <Spinner className="size-3.5" /> : <RotateCw size={14} />}
-            Run new batch
+            <RotateCw aria-hidden />
+            {starting ? "Starting…" : "Run new batch"}
           </Button>
         </div>
       ) : null}

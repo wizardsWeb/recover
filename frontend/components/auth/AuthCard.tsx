@@ -17,8 +17,8 @@ interface AuthCardProps {
  */
 export function AuthCard({ title, description, children, footer, className }: AuthCardProps) {
   return (
-    <div className={cn("rounded-lg border border-hairline bg-elevated p-8 shadow-sm", className)}>
-      <h1 className="font-display text-xl font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+    <div className={cn("rounded-card border border-hairline bg-elevated p-8 shadow-card", className)}>
+      <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">{title}</h1>
       {description ? (
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">{description}</p>
       ) : null}

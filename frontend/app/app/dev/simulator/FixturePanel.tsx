@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { ApiError } from "@/lib/api/client";
 import { getFixtureStatus, loadFixtures, resetFixtures, type FixtureStatus } from "@/lib/api/simulator";
 import { Panel, useSimulatorRefresh } from "./SimulatorPanels";
@@ -89,7 +88,9 @@ export function FixturePanel() {
       id="simulator-fixtures"
       title="Fixtures"
       description="The six persona customers every scenario depends on"
-      actions={busy ? <Spinner className="text-ink-faint" /> : null}
+      actions={
+        busy ? <span className="text-xs text-ink-faint">Working…</span> : null
+      }
     >
       <div className="space-y-4">
         <div className="rounded-md bg-subtle px-3 py-2.5">
@@ -152,8 +153,7 @@ export function FixturePanel() {
               Cancel
             </Button>
             <Button variant="destructive" onClick={onReset} disabled={busy || confirmText !== RESET_PHRASE}>
-              {busy ? <Spinner /> : null}
-              Reset everything
+              {busy ? "Resetting…" : "Reset everything"}
             </Button>
           </DialogFooter>
         </DialogContent>

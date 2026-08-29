@@ -23,6 +23,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, RadioTower } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { AlertsResponse, NetworkAlert, StreamEvent } from "@/lib/api/network";
 import { alertStreamUrl, fetchAlerts } from "@/lib/api/network";
 import { formatPercent, formatRelativeTime } from "@/lib/utils/format";
@@ -30,12 +31,36 @@ import { cn } from "@/lib/utils/cn";
 
 type ConnectionState = "connecting" | "live" | "offline";
 
-/** Colour and copy per severity. Amber for degraded, red for critical. */
-const SEVERITY: Record<string, { tone: string; label: string }> = {
-  critical: { tone: "border-danger/40 bg-danger-subtle text-danger", label: "Critical" },
-  high: { tone: "border-danger/30 bg-danger-subtle text-danger", label: "High" },
-  medium: { tone: "border-warning/40 bg-warning-subtle text-warning", label: "Degraded" },
-  low: { tone: "border-warning/30 bg-warning-subtle text-warning", label: "Minor" },
+/**
+ * Colour and copy per severity.
+ *
+ * `variant="destructive"` on shadcn's `Alert` only recolours the text, which is
+ * right for a form error and not enough for an outage banner — so the fill and
+ * the border come from the semantic tokens on top of it. Amber for degraded,
+ * red for critical: a degraded instrument is still worth retrying into and a
+ * critical one is not, and painting both red would flatten that decision.
+ */
+const SEVERITY: Record<string, { tone: string; label: string; destructive: boolean }> = {
+  critical: {
+    tone: "border-danger/40 bg-danger-subtle text-danger",
+    label: "Critical",
+    destructive: true,
+  },
+  high: {
+    tone: "border-danger/30 bg-danger-subtle text-danger",
+    label: "High",
+    destructive: true,
+  },
+  medium: {
+    tone: "border-warning/40 bg-warning-subtle text-warning",
+    label: "Degraded",
+    destructive: false,
+  },
+  low: {
+    tone: "border-warning/30 bg-warning-subtle text-warning",
+    label: "Minor",
+    destructive: false,
+  },
 };
 
 /** Backoff between reconnects, in ms. Capped so a long outage keeps retrying. */
@@ -64,46 +89,47 @@ function AlertCard({ alert }: { alert: NetworkAlert }) {
   const instrument = [alert.bank, alert.method?.toUpperCase()].filter(Boolean).join(" ");
 
   return (
-    <div className={cn("rounded-lg border p-4", severity.tone)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5">
-          {/* Never colour alone — the icon and the severity word carry the same
-              meaning for anyone who cannot separate the two backgrounds. */}
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          <div>
-            <h3 className="text-sm font-medium">
-              {instrument || "Unknown instrument"} — {severity.label.toLowerCase()} degradation
-            </h3>
-            <p className="mt-0.5 text-xs opacity-90">
-              Detected {formatRelativeTime(alert.detected_at)}
-              {alert.affected_merchants_count
-                ? ` · affecting ${alert.affected_merchants_count} merchants on the network`
-                : null}
-            </p>
-          </div>
+    <Alert
+      variant={severity.destructive ? "destructive" : "default"}
+      className={cn("rounded-card", severity.tone)}
+    >
+      {/* Never colour alone — the icon and the severity word carry the same
+          meaning for anyone who cannot separate the two backgrounds. */}
+      <AlertTriangle aria-hidden />
+      <AlertTitle>
+        {instrument || "Unknown instrument"} — {severity.label.toLowerCase()} degradation
+      </AlertTitle>
+      <AlertDescription className="text-current">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <p className="text-xs opacity-90">
+            Detected {formatRelativeTime(alert.detected_at)}
+            {alert.affected_merchants_count
+              ? ` · affecting ${alert.affected_merchants_count} merchants on the network`
+              : null}
+          </p>
+
+          <dl className="flex shrink-0 gap-4 font-mono text-xs tabular-nums">
+            {alert.network_wide_success_rate !== null ? (
+              <div>
+                <dt className="text-[10px] tracking-[0.06em] uppercase opacity-70">Now</dt>
+                <dd>{formatPercent(alert.network_wide_success_rate)}</dd>
+              </div>
+            ) : null}
+            {alert.baseline_rate !== null ? (
+              <div>
+                <dt className="text-[10px] tracking-[0.06em] uppercase opacity-70">Normal</dt>
+                <dd>{formatPercent(alert.baseline_rate)}</dd>
+              </div>
+            ) : null}
+          </dl>
         </div>
 
-        <dl className="flex shrink-0 gap-4 font-mono text-xs tabular-nums">
-          {alert.network_wide_success_rate !== null ? (
-            <div>
-              <dt className="text-[10px] tracking-wide uppercase opacity-70">Now</dt>
-              <dd>{formatPercent(alert.network_wide_success_rate)}</dd>
-            </div>
-          ) : null}
-          {alert.baseline_rate !== null ? (
-            <div>
-              <dt className="text-[10px] tracking-wide uppercase opacity-70">Normal</dt>
-              <dd>{formatPercent(alert.baseline_rate)}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-
-      <p className="mt-3 border-t border-current/15 pt-2.5 text-xs opacity-90">
-        Retries into this instrument are paused. The agent is falling back to the other channels
-        its playbook allows.
-      </p>
-    </div>
+        <p className="mt-3 border-t border-current/15 pt-2.5 text-xs opacity-90">
+          Retries into this instrument are paused. The agent is falling back to the other channels
+          its playbook allows.
+        </p>
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -186,8 +212,8 @@ export function NetworkAlertBanner({ initial }: { initial: AlertsResponse }) {
   return (
     <section aria-live="polite" className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-medium text-ink">
-          <RadioTower size={15} className="text-ink-faint" aria-hidden />
+        <h2 className="flex items-center gap-2 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+          <RadioTower className="size-4 text-ink-faint" strokeWidth={1.75} aria-hidden />
           Network health
         </h2>
         <LiveDot state={state} />
@@ -196,18 +222,16 @@ export function NetworkAlertBanner({ initial }: { initial: AlertsResponse }) {
       <AnimatePresence initial={false} mode="popLayout">
         {active.length === 0 ? (
           <motion.div key="healthy" {...motionProps}>
-            <div className="flex items-center gap-2.5 rounded-lg border border-success/30 bg-success-subtle p-4 text-success">
-              <CheckCircle2 size={16} className="shrink-0" aria-hidden />
-              <div>
-                <p className="text-sm font-medium">All banks healthy</p>
-                <p className="text-xs opacity-90">
-                  Last checked {formatRelativeTime(alerts.checked_at)}
-                  {alerts.recent.length > 0
-                    ? ` · ${alerts.recent.length} alert${alerts.recent.length === 1 ? "" : "s"} resolved in the last 24 hours`
-                    : null}
-                </p>
-              </div>
-            </div>
+            <Alert className="rounded-card border-success/30 bg-success-subtle text-success">
+              <CheckCircle2 aria-hidden />
+              <AlertTitle>All banks healthy</AlertTitle>
+              <AlertDescription className="text-xs text-current opacity-90">
+                Last checked {formatRelativeTime(alerts.checked_at)}
+                {alerts.recent.length > 0
+                  ? ` · ${alerts.recent.length} alert${alerts.recent.length === 1 ? "" : "s"} resolved in the last 24 hours`
+                  : null}
+              </AlertDescription>
+            </Alert>
           </motion.div>
         ) : (
           active.map((alert) => (

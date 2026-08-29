@@ -15,8 +15,11 @@
 
 import { AlertTriangle } from "lucide-react";
 
+import { BucketDonut } from "@/components/domain/BucketDonut";
 import { UPLIFT_BUCKET_CONFIG } from "@/components/domain/UpliftBucketBadge";
-import { StaggeredItem } from "@/components/ui/StaggeredItem";
+import { Card, CardContent } from "@/components/ui/card";
+import { LiftCard } from "@/components/ui/LiftCard";
+import { StaggerList } from "@/components/ui/StaggerList";
 import type { UpliftBucket, UpliftBucketRow } from "@/lib/api/roi";
 import { formatINR, formatPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -27,8 +30,8 @@ const BUCKET_ORDER: UpliftBucket[] = ["persuadable", "sure_thing", "lost_cause",
 function Field({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div>
-      <div className="text-[10px] tracking-wide text-ink-faint uppercase">{label}</div>
-      <div className={cn("font-mono text-sm tabular-nums text-ink", tone)}>{value}</div>
+      <dt className="text-[10px] tracking-[0.06em] text-ink-faint uppercase">{label}</dt>
+      <dd className={cn("font-mono text-sm text-ink tabular-nums", tone)}>{value}</dd>
     </div>
   );
 }
@@ -36,8 +39,8 @@ function Field({ label, value, tone }: { label: string; value: string; tone?: st
 function EmptyTile({ bucket }: { bucket: UpliftBucket }) {
   const config = UPLIFT_BUCKET_CONFIG[bucket];
   return (
-    <div className="rounded-lg border border-dashed border-hairline p-4 opacity-60">
-      <h3 className="text-sm font-medium text-ink-muted">{config.label}</h3>
+    <div className="h-full rounded-card border border-dashed border-hairline p-5 opacity-60">
+      <h3 className="font-display text-base font-semibold text-ink-muted">{config.label}</h3>
       <p className="mt-1 text-xs text-ink-faint">No cases in this segment yet.</p>
     </div>
   );
@@ -46,46 +49,68 @@ function EmptyTile({ bucket }: { bucket: UpliftBucket }) {
 function BucketTile({ row }: { row: UpliftBucketRow }) {
   const config = UPLIFT_BUCKET_CONFIG[row.bucket] ?? UPLIFT_BUCKET_CONFIG.unknown;
   const harmful = row.estimated_lift < 0;
+  // Persuadable is the segment the whole page is arguing for: it is where a
+  // message changes the outcome, and it is the only one worth spending a send
+  // on. A 2px rule and a step of elevation is how the grid says so without a
+  // sentence. The brief asked for gold here; gold is already spent on the
+  // incremental figure above, and a screen with two accents has none.
+  const isKeySegment = row.bucket === "persuadable";
 
   return (
-    <div className="rounded-lg border border-hairline p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-ink">{config.label}</h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{config.title}</p>
-        </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-4xl px-2 py-0.5 font-mono text-xs tabular-nums",
-            harmful ? "bg-danger-subtle text-danger" : config.className,
-          )}
-        >
-          {row.estimated_lift > 0 ? "+" : ""}
-          {formatPercent(row.estimated_lift)}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-hairline pt-3 sm:grid-cols-4">
-        <Field label="Cases" value={String(row.treated_cases)} />
-        <Field label="Treated" value={formatPercent(row.treated_recovery_rate)} />
-        <Field label="Control" value={formatPercent(row.control_recovery_rate)} />
-        <Field
-          label="Incremental"
-          value={formatINR(row.incremental_recovery_cents)}
-          tone={harmful ? "text-danger" : undefined}
-        />
-      </div>
-
-      {row.uses_global_control_rate ? (
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-faint">
-          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          <span>
-            Compared against the overall holdout rate — this segment has{" "}
-            {row.control_cases === 0 ? "no" : `only ${row.control_cases}`} controls of its own.
+    <Card
+      className={cn(
+        "h-full",
+        isKeySegment ? "border-2 border-brand shadow-md" : "border-hairline shadow-card",
+      )}
+    >
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-display text-base font-semibold tracking-[-0.01em] text-ink">
+              {config.label}
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">{config.title}</p>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded-4xl px-2 py-0.5 font-mono text-xs tabular-nums",
+              harmful ? "bg-danger-subtle text-danger" : config.className,
+            )}
+          >
+            {row.estimated_lift > 0 ? "+" : ""}
+            {formatPercent(row.estimated_lift)}
           </span>
-        </p>
-      ) : null}
-    </div>
+        </div>
+
+        <div className="mt-5 flex items-center gap-5 border-t border-hairline pt-4">
+          <BucketDonut
+            treated={row.treated_recovery_rate}
+            control={row.control_recovery_rate}
+            harmful={harmful}
+          />
+          <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-3">
+            <Field label="Cases" value={String(row.treated_cases)} />
+            <Field label="Control" value={formatPercent(row.control_recovery_rate)} />
+            <Field
+              label="Incremental"
+              value={formatINR(row.incremental_recovery_cents)}
+              tone={harmful ? "text-danger" : undefined}
+            />
+            <Field label="Treated" value={formatPercent(row.treated_recovery_rate)} />
+          </dl>
+        </div>
+
+        {row.uses_global_control_rate ? (
+          <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-faint">
+            <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden />
+            <span>
+              Compared against the overall holdout rate — this segment has{" "}
+              {row.control_cases === 0 ? "no" : `only ${row.control_cases}`} controls of its own.
+            </span>
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -93,15 +118,15 @@ export function UpliftBucketGrid({ rows }: { rows: UpliftBucketRow[] }) {
   const byBucket = new Map(rows.map((row) => [row.bucket, row]));
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {BUCKET_ORDER.map((bucket, index) => {
+    <StaggerList stagger={0.08} className="grid gap-4 sm:grid-cols-2">
+      {BUCKET_ORDER.map((bucket) => {
         const row = byBucket.get(bucket);
         return (
-          <StaggeredItem key={bucket} index={index}>
+          <LiftCard key={bucket} staggered effect="scale">
             {row ? <BucketTile row={row} /> : <EmptyTile bucket={bucket} />}
-          </StaggeredItem>
+          </LiftCard>
         );
       })}
-    </div>
+    </StaggerList>
   );
 }

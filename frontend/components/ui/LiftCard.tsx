@@ -3,7 +3,13 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
-import { HOVER_LIFT, LIST_ITEM, LIST_ITEM_STATIC, SPRING_SNAPPY } from "@/lib/motion";
+import {
+  HOVER_LIFT,
+  LIST_ITEM,
+  LIST_ITEM_SCALE,
+  LIST_ITEM_STATIC,
+  SPRING_SNAPPY,
+} from "@/lib/motion";
 
 interface LiftCardProps {
   children: ReactNode;
@@ -15,6 +21,8 @@ interface LiftCardProps {
    * `hidden`/`show` would be stuck at `hidden` — invisible — forever.
    */
   staggered?: boolean;
+  /** How a staggered card arrives. See `StaggerItem`. */
+  effect?: "rise" | "scale";
 }
 
 /**
@@ -30,13 +38,23 @@ interface LiftCardProps {
  * follows the theme rather than pinning one shadow for light and another for
  * dark — which is exactly what a literal here would have done.
  */
-export function LiftCard({ children, className, staggered = false }: LiftCardProps) {
+export function LiftCard({
+  children,
+  className,
+  staggered = false,
+  effect = "rise",
+}: LiftCardProps) {
   const prefersReducedMotion = useReducedMotion();
+  const enterVariants = prefersReducedMotion
+    ? LIST_ITEM_STATIC
+    : effect === "scale"
+      ? LIST_ITEM_SCALE
+      : LIST_ITEM;
 
   return (
     <motion.div
       className={className}
-      variants={staggered ? (prefersReducedMotion ? LIST_ITEM_STATIC : LIST_ITEM) : undefined}
+      variants={staggered ? enterVariants : undefined}
       whileHover={prefersReducedMotion ? undefined : HOVER_LIFT}
       transition={prefersReducedMotion ? { duration: 0 } : SPRING_SNAPPY}
     >

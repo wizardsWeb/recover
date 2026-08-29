@@ -22,7 +22,6 @@ import { CloudOff, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import type { DowntimeRequest } from "@/lib/api/network";
 import { seedNetworkStats, triggerDowntime } from "@/lib/api/network";
 
@@ -98,12 +97,8 @@ export function NetworkSimulatorControls() {
           disabled={running !== null || refreshing}
           onClick={seed}
         >
-          {running === "seed" || refreshing ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <Sparkles size={14} />
-          )}
-          Seed a week of network data
+          <Sparkles aria-hidden />
+          {running === "seed" || refreshing ? "Seeding…" : "Seed a week of network data"}
         </Button>
 
         {SCENARIOS.map((scenario) => (
@@ -114,8 +109,7 @@ export function NetworkSimulatorControls() {
             disabled={running !== null || refreshing}
             onClick={() => fire(scenario.id, scenario.payload)}
           >
-            {running === scenario.id ? <Spinner className="size-3.5" /> : null}
-            {scenario.label}
+            {running === scenario.id ? "Firing…" : scenario.label}
           </Button>
         ))}
       </div>

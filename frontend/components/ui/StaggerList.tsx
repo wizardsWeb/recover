@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
-import { LIST_ITEM, LIST_ITEM_STATIC, listVariants } from "@/lib/motion";
+import { LIST_ITEM, LIST_ITEM_SCALE, LIST_ITEM_STATIC, listVariants } from "@/lib/motion";
 
 interface StaggerListProps {
   children: ReactNode;
@@ -39,21 +39,33 @@ export function StaggerList({ children, className, stagger = 0.05, as = "div" }:
   );
 }
 
-/** One row of a `StaggerList`. */
+/**
+ * One row of a `StaggerList`.
+ *
+ * `effect` picks how it arrives: `rise` for anything read as a list, `scale`
+ * for a card grid. Both collapse to a plain fade under reduced motion.
+ */
 export function StaggerItem({
   children,
   className,
   as = "div",
+  effect = "rise",
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "li" | "tr";
+  effect?: "rise" | "scale";
 }) {
   const prefersReducedMotion = useReducedMotion();
   const Component = motion[as];
+  const variants = prefersReducedMotion
+    ? LIST_ITEM_STATIC
+    : effect === "scale"
+      ? LIST_ITEM_SCALE
+      : LIST_ITEM;
 
   return (
-    <Component className={className} variants={prefersReducedMotion ? LIST_ITEM_STATIC : LIST_ITEM}>
+    <Component className={className} variants={variants}>
       {children}
     </Component>
   );

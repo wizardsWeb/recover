@@ -41,7 +41,9 @@ export default async function ROIPage() {
 
           {roi.bucket_breakdown.length > 0 ? (
             <section>
-              <h2 className="mb-3 text-sm font-medium text-ink">Where the lift came from</h2>
+              <h2 className="mb-3 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+                Where the lift came from
+              </h2>
               <UpliftBucketGrid rows={roi.bucket_breakdown} />
             </section>
           ) : null}
