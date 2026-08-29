@@ -4,8 +4,10 @@ Narration for `frontend/tests/e2e/demo-recording.spec.ts`. Segment numbers match
 the `S1 ·`, `S2 ·` … labels in that file exactly.
 
 **Timings below are measured, not estimated.** They come from a passing run
-against a local production build: 6:08 of video, 46 beats, every selector
-matched. Re-run and re-read the `SEGMENT WINDOWS` table if you re-record —
+against a local production build with the cursor and eased motion in place:
+6:41 of video, 46 beats, every selector matched. (It grew from 6:08 because
+typing a field takes longer than assigning its value, and an eased scroll takes
+longer than a jump — both on purpose.) Re-run and re-read the `SEGMENT WINDOWS` table if you re-record —
 navigation time moves, and it moves the windows with it.
 
 ## How to use this
@@ -50,7 +52,7 @@ the voiceover must not contradict it:
 
 ---
 
-## SEGMENT 1 · 0:00–0:13 · 13s · landing page
+## SEGMENT 1 · 0:00–0:16 · 16s · landing page
 
 *Landing hero, then two scrolls.*
 
@@ -62,7 +64,7 @@ the voiceover must not contradict it:
 
 ---
 
-## SEGMENT 2 · 0:13–0:28 · 15s · sign-up, then sign in
+## SEGMENT 2 · 0:16–0:36 · 20s · sign-up, then sign in
 
 *Sign-up form, then signing in as Zenith Learning.*
 
@@ -75,7 +77,7 @@ the voiceover must not contradict it:
 
 ---
 
-## SEGMENT 3 · 0:28–0:47 · 20s · the dashboard
+## SEGMENT 3 · 0:36–0:56 · 20s · the dashboard
 
 *Dashboard KPIs, recovery funnel, recent cases.*
 
@@ -90,7 +92,7 @@ acting on" while it's on screen.]*
 
 ---
 
-## SEGMENT 4 · 0:47–1:17 · 30s · S1 Suresh — causal diagnosis
+## SEGMENT 4 · 0:56–1:26 · 30s · S1 Suresh — causal diagnosis
 
 *Suresh Iyer's case, `diagnose` expanded, the causal reasoning panel, competing
 hypotheses.*
@@ -109,7 +111,7 @@ first — "the hour, the bank, the instrument".]*
 
 ---
 
-## SEGMENT 5 · 1:17–1:44 · 27s · the bandit, uplift, guardrail
+## SEGMENT 5 · 1:26–1:54 · 28s · the bandit, uplift, guardrail
 
 *`decide` and its alternatives fan, then `uplift check`, then `guardrail`.*
 
@@ -126,7 +128,7 @@ first — "the hour, the bank, the instrument".]*
 
 ---
 
-## SEGMENT 6 · 1:44–2:14 · 31s · S5 Vikram — reply, handoff, real link
+## SEGMENT 6 · 1:54–2:28 · 34s · S5 Vikram — reply, handoff, real link
 
 *Vikram Sethi's case, `listen`, `execute` with the payment link, the handoff card
 inside it.*
@@ -144,19 +146,22 @@ inside it.*
 
 ---
 
-## SEGMENT 7 · 2:14–2:30 · 16s · tenant switch
+## SEGMENT 7 · 2:28–2:50 · 22s · tenant switch
 
 *Signing out, signing in as Kajal & Co.*
 
-> Different business. Same agent. // Kajal and Company — a direct-to-consumer
-> beauty brand. / Different customers, different playbook, / and a policy that
-> learned on its own traffic, not on somebody else's.
+> Different business. Same agent. // Signing out, signing back in as Kajal and
+> Company — a direct-to-consumer beauty brand. //
+> Different customers. Different playbook. / And a policy that learned on its own
+> traffic, not on somebody else's. // Every merchant on this platform gets their
+> own posterior. / Nobody inherits somebody else's mistakes.
 
-**38 words.**
+**53 words.** *[The window covers a real sign-out and sign-in, so there is natural
+quiet in the middle. Let it breathe rather than filling it.]*
 
 ---
 
-## SEGMENT 8 · 2:30–2:40 · 9s · cases list
+## SEGMENT 8 · 2:50–2:59 · 9s · cases list
 
 *Cases list with the uplift column.*
 
@@ -167,7 +172,7 @@ inside it.*
 
 ---
 
-## SEGMENT 9 · 2:40–3:05 · 26s · S2 Priya — the generated message
+## SEGMENT 9 · 2:59–3:25 · 26s · S2 Priya — the generated message
 
 *Priya Menon's case, `execute` expanded with the drafted message, then `decide`.*
 
@@ -182,7 +187,7 @@ inside it.*
 
 ---
 
-## SEGMENT 10 · 3:05–3:23 · 18s · S3 Aditya — the silent recovery
+## SEGMENT 10 · 3:25–3:44 · 19s · S3 Aditya — the silent recovery
 
 *Aditya Rao's case, `uplift check` expanded.*
 
@@ -195,7 +200,7 @@ inside it.*
 
 ---
 
-## SEGMENT 11 · 3:23–3:37 · 14s · S6 Sana — consent
+## SEGMENT 11 · 3:44–3:58 · 14s · S6 Sana — consent
 
 *Sana Khatri's case. No step is expanded — there are none.*
 
@@ -209,7 +214,7 @@ belongs to segment 17, where the batch data supports it.]*
 
 ---
 
-## SEGMENT 12 · 3:37–3:52 · 15s · playbooks
+## SEGMENT 12 · 3:58–4:13 · 15s · playbooks
 
 *Playbooks list, then the checkout-abandonment playbook.*
 
@@ -221,7 +226,7 @@ belongs to segment 17, where the batch data supports it.]*
 
 ---
 
-## SEGMENT 13 · 3:52–4:10 · 18s · B1 — the learning curve
+## SEGMENT 13 · 4:13–4:30 · 17s · B1 — the learning curve
 
 *The batch page and its learning curve.*
 
@@ -234,7 +239,7 @@ belongs to segment 17, where the batch data supports it.]*
 
 ---
 
-## SEGMENT 14 · 4:10–4:30 · 20s · B2 — uplift ROI
+## SEGMENT 14 · 4:30–4:50 · 20s · B2 — uplift ROI
 
 *ROI page, then the uplift buckets.*
 
@@ -250,25 +255,32 @@ belongs to segment 17, where the batch data supports it.]*
 
 ---
 
-## SEGMENT 15 · 4:30–5:06 · 35s · B3 — the network, live
+## SEGMENT 15 · 4:50–5:37 · 47s · B3 — the network, live
 
 *Network page, bank-by-hour heatmap, then a live SBI UPI outage after a reload.*
 
-> No single merchant sees enough failures to know a bank is down. // Across the
-> network, everyone does. / Five banks, twenty-four hours, success rates pooled —
-> / no customer data, just the rates. //
+> Here's the thing one merchant can never do alone. // No single business sees
+> enough failed payments to know whether a bank is actually down, / or whether it
+> was just unlucky. // Across the network, everyone sees it. / Five banks,
+> twenty-four hours, success rates pooled — / no customer data leaves anyone's
+> account. Just the rates. //
+> Green is healthy. Brown is degraded. Red is failing. / You can read a bank's
+> whole day off one row. //
 > And this is live, right now. / S-B-I's U-P-I stack has dropped to thirty-one per
 > cent, against a normal of eighty-two. / Three merchants affected. Detected four
 > seconds ago. //
-> Every agent on the network stops retrying into it — / immediately, before those
-> retries fail and spend a customer's patience on a problem that isn't theirs. //
-> That's the part one merchant, alone, cannot build.
+> So every agent on the network stops retrying into it. / Immediately. / Before
+> those retries fail and spend a customer's patience on a problem that was never
+> theirs. // A failed retry costs trust you don't get back. / This is how you
+> avoid spending it.
 
-**84 words.**
+**121 words.** *[Longest window in the video, and the strongest moment. The
+outage banner appears on a page reload part-way through — land "this is live,
+right now" on it.]*
 
 ---
 
-## SEGMENT 16 · 5:06–5:39 · 33s · S4 Meera — B2B promise to pay
+## SEGMENT 16 · 5:37–6:11 · 34s · S4 Meera — B2B promise to pay
 
 *Signing in as Sharma Distributors, Meera Patil's case, `execute` with two
 attempts, then `listen` with the promise card.*
@@ -287,7 +299,7 @@ attempts, then `listen` with the promise card.*
 
 ---
 
-## SEGMENT 17 · 5:39–6:02 · 23s · audit trail and test mode
+## SEGMENT 17 · 6:11–6:35 · 24s · audit trail and test mode
 
 *Audit log, then Settings, then the Test mode tab.*
 
@@ -304,7 +316,7 @@ screen — the numbers above come from the audit log and the batch summary.]*
 
 ---
 
-## SEGMENT 18 · 6:02–6:08 · 6s · close
+## SEGMENT 18 · 6:35–6:41 · 6s · close
 
 *Back to the dashboard.*
 
@@ -317,13 +329,13 @@ screen — the numbers above come from the audit log and the batch summary.]*
 
 ## Totals
 
-**~884 words across 6:08.** That's 2.4 words a second — a comfortable read, with
+**~1,010 words across 6:41.** That's 2.5 words a second — a comfortable read, with
 the tight spots at segments 4, 15 and 16.
 
 ## If you need it under five minutes
 
-The video is 6:08, not the 4:30–5:00 originally targeted. About 1:15 of it is
-navigation between beats, and three of those navigations are sign-ins — which are
+The video is 6:41, not the 4:30–5:00 originally targeted. About 1:50 of it is
+navigation, typing and eased scrolling between beats, and three of those navigations are sign-ins — which are
 the multi-tenancy story, so they earn their time.
 
 Cheapest cuts, in order, none of which lose a persona or an AI feature:
@@ -335,5 +347,5 @@ Cheapest cuts, in order, none of which lose a persona or an AI feature:
 | Segment 1's second scroll | ~8s | one landing-page beat |
 | Film Meera under Kajal's login | ~20s | the third tenant, and the B2B framing |
 
-The first three together get you to about 5:35. Only the fourth breaks 5:00, and
+The first three together get you to about 6:05. Only the fourth breaks 5:00, and
 it costs the most.
