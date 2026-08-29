@@ -14,6 +14,33 @@ Narration for the demo video, written for the **1.5× cut** and rendered to MP3.
 
 ## Rebuilding after an edit
 
+**ElevenLabs** — better voice, needs an API key:
+
+```bash
+export ELEVENLABS_API_KEY=sk_...
+cd docs/voiceover
+python3 build-voiceover-elevenlabs.py --list-voices
+python3 build-voiceover-elevenlabs.py --voice Rachel
+```
+
+Clips are cached in `segments-11labs/` and keyed on the words, voice and model,
+so editing one segment re-bills one segment rather than nineteen. The whole
+script is 6,456 characters.
+
+**Or generate them by hand** in the ElevenLabs web app.
+`script-for-elevenlabs.txt` is the text, one block per segment, each labelled
+with the window it has to fit. Save them as `S01.mp3` … `S19.mp3` and assemble:
+
+```bash
+python3 build-voiceover-elevenlabs.py --from-dir ~/Downloads/vo
+```
+
+Generate **per segment, not as one blob**. One long clip gives you no way to know
+where segment nine begins, and the narration drifts out from under the picture
+within a minute.
+
+**macOS `say`** — no key, no cost, flatter voice:
+
 ```bash
 cd docs/voiceover
 python3 build-voiceover.py                  # Samantha (default)
