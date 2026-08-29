@@ -1,6 +1,8 @@
 "use client";
 
 import { Cpu, Eye, ShieldCheck } from "lucide-react";
+
+import { RazorpayGlyph } from "@/components/brand/RazorpayGlyph";
 import type { LucideIcon } from "lucide-react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { useRef } from "react";
@@ -27,6 +29,19 @@ const STEPS: Step[] = [
     title: "Recovers",
     body: "Executes through Razorpay rails. Consent, quiet hours and frequency checked first, every action auditable.",
   },
+];
+
+/**
+ * The Razorpay products the agent actually calls, in the order the playbooks
+ * use them. Payment Links and Subscriptions are real calls today; the Payment
+ * Gateway is where the webhooks come *from*, which is why it is named as a rail
+ * rather than as something the agent invokes.
+ */
+const RAILS = [
+  "Payment Gateway",
+  "Payment Links",
+  "Subscriptions",
+  "RazorpayX",
 ];
 
 /**
@@ -136,6 +151,28 @@ export function HowItWorks() {
               );
             })}
           </ol>
+        </div>
+
+        {/* ---- What it executes through ----------------------------------
+            The claim the three steps above are only credible with. "Recovers"
+            means nothing until it says through what — and naming the four
+            products is more specific, and therefore more checkable, than a
+            logo on its own. */}
+        <div className="mt-16 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-hairline pt-8">
+          <span className="flex items-center gap-2">
+            <RazorpayGlyph className="size-5" title="Razorpay" />
+            <span className="text-sm font-medium text-ink">Executes through Razorpay rails</span>
+          </span>
+          <ul className="flex flex-wrap items-center gap-2">
+            {RAILS.map((rail) => (
+              <li
+                key={rail}
+                className="rounded-4xl border border-hairline bg-elevated px-2.5 py-1 text-[11px] font-medium text-ink-muted"
+              >
+                {rail}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

@@ -149,6 +149,14 @@
   --navpill-cta-bg: #111111;
   --navpill-shadow: 0 4px 14px rgb(0 0 0 / 0.16);
 
+  /* Razorpay's own two brand colours, taken from their published glyph. They
+     are here rather than as literals in the component for the same reason
+     every other colour is — but unlike the rest of this file they are not ours
+     to re-tint, so they do not change between light and dark. A "powered by"
+     mark rendered in a colour the vendor does not use is worse than no mark. */
+  --razorpay-blue: #3395ff;
+  --razorpay-navy: #072654;
+
   /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
      literals in the component. Not folded into --success-subtle: the point of
      this bubble is that a merchant recognises the channel at a glance, and a
@@ -325,6 +333,8 @@
   --color-navpill-fg-strong: var(--navpill-fg-strong);
   --color-navpill-cta-bg: var(--navpill-cta-bg);
   --shadow-navpill: var(--navpill-shadow);
+  --color-razorpay-blue: var(--razorpay-blue);
+  --color-razorpay-navy: var(--razorpay-navy);
 
   /* WhatsApp's own brand green, for the one bubble that should look like an
      actual WhatsApp message. */

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CreditCard, FileText, RefreshCw, ShoppingCart } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { RazorpayGlyph } from "@/components/brand/RazorpayGlyph";
 import { PlaybookToggle } from "@/components/domain/PlaybookToggle";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { LiftCard } from "@/components/ui/LiftCard";
@@ -24,31 +25,35 @@ export const metadata: Metadata = { title: "Playbooks" };
  */
 const PLAYBOOK_STYLE: Record<
   string,
-  { icon: LucideIcon; chip: string; tint: string; rule: string }
+  { icon: LucideIcon; chip: string; tint: string; rule: string; rail: string }
 > = {
   failed_payment: {
     icon: CreditCard,
     chip: "bg-danger-subtle text-danger",
     tint: "from-danger/[0.04]",
     rule: "border-l-danger",
+    rail: "Razorpay Payment Gateway",
   },
   checkout_abandonment: {
     icon: ShoppingCart,
     chip: "bg-warning-subtle text-warning",
     tint: "from-warning/[0.04]",
     rule: "border-l-warning",
+    rail: "Razorpay Payment Links",
   },
   subscription_failure: {
     icon: RefreshCw,
     chip: "bg-info-subtle text-info",
     tint: "from-info/[0.04]",
     rule: "border-l-info",
+    rail: "Razorpay Subscriptions",
   },
   b2b_overdue: {
     icon: FileText,
     chip: "bg-brand-subtle text-brand",
     tint: "from-brand/[0.04]",
     rule: "border-l-brand",
+    rail: "RazorpayX",
   },
 };
 
@@ -126,7 +131,15 @@ function PlaybookCard({ playbook }: { playbook: PlaybookSummary }) {
           />
         </dl>
 
-        <div className="mt-4 flex items-center justify-between text-xs">
+        {/* Which Razorpay product this playbook executes through. On the card
+            rather than only in the docs, because "how does it actually recover
+            the money" is the first question a reader has about a playbook. */}
+        <div className="mt-4 flex items-center gap-1.5 border-t border-hairline pt-3">
+          <RazorpayGlyph className="size-3.5" />
+          <span className="text-[11px] font-medium text-ink-muted">{style?.rail}</span>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-xs">
           <span className="font-mono text-ink-faint">
             {playbook.armCount} arms · {stats.totalCases} cases
           </span>

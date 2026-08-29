@@ -6,6 +6,7 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { FlaskConical, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 
+import { RazorpayWordmark } from "@/components/brand/RazorpayGlyph";
 import { NAV_ITEMS, isActive } from "@/components/shell/nav";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { PersonAvatar } from "@/components/ui/PersonAvatar";
@@ -205,6 +206,17 @@ export function Sidebar({ showDevTools, defaultCollapsed, businessName, email }:
 
           The avatar is seeded on the email rather than the business name, so
           renaming the business does not change the merchant's own face. */}
+      {/* ---- Powered by ---------------------------------------------------
+          Above the profile block rather than below it, so the last thing in the
+          rail is still who is signed in. Dropped on the collapsed rail: at 64px
+          there is no room for a mark and a word, and the glyph alone would read
+          as a nav item. */}
+      {!collapsed && (
+        <div className="hidden px-4 pt-2 lg:block">
+          <RazorpayWordmark onDark className="text-[11px]" />
+        </div>
+      )}
+
       <div className="mt-2 border-t border-sidebar-border p-2">
         <div
           className={cn(

@@ -17,6 +17,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { RazorpayGlyph } from "@/components/brand/RazorpayGlyph";
 import { BanditAlternativesFan } from "@/components/domain/BanditAlternativesFan";
 import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
 import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
@@ -402,6 +403,34 @@ function TypingBubble({ children }: { children: ReactNode }) {
  * message with no such marker would be the one place in this UI that implies
  * something happened when it did not.
  */
+/**
+ * The real payment link an attempt minted, if it minted one.
+ *
+ * Two conditions, and both are load-bearing. The host must be Razorpay's, and
+ * the adapter must have reported ``simulated: false`` — a simulated link is also
+ * an ``rzp.io`` URL by design, so the host alone would present a fabricated link
+ * as a real one, which is the single most misleading thing this page could do.
+ *
+ * The host check accepts any ``rzp.io`` path. Razorpay currently mints
+ * ``rzp.io/rzp/…`` and older links are ``rzp.io/l/…``; pinning the path would
+ * make this silently stop recognising links the next time they change it.
+ */
+function realPaymentLink(attempt: ExecutionAttempt): string | null {
+  const response = attempt.response_payload ?? {};
+  if (response.simulated !== false) return null;
+
+  const url = String(response.payment_link_url ?? response.short_url ?? "");
+  if (!url) return null;
+
+  try {
+    const { hostname, protocol } = new URL(url);
+    const isRazorpay = hostname === "rzp.io" || hostname.endsWith(".razorpay.com");
+    return isRazorpay && protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
   const body = String(attempt.request_payload?.body ?? "");
   const generation = attempt.response_payload?.message_generation as
@@ -415,6 +444,7 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
   const reasoning = generation?.generation_reasoning
     ? String(generation.generation_reasoning)
     : null;
+  const paymentLink = realPaymentLink(attempt);
 
   return (
     <div className="space-y-2">
@@ -423,14 +453,40 @@ function ExecuteDetail({ attempt }: { attempt: ExecutionAttempt }) {
             12px everywhere else. The shape is the cue: a merchant should know
             which channel this went out on before reading a word of it. */}
         <div className="relative max-w-[280px] rounded-[0_12px_12px_12px] bg-whatsapp-bubble px-3.5 py-2.5">
+          {/* The label is on the *message*, not the link. The send is simulated
+              even when the link inside it is real, and collapsing those two
+              facts into one badge is how a demo overclaims. */}
           <span className="absolute top-1.5 right-2 text-[9px] font-medium text-warning">
-            Simulated
+            Send simulated
           </span>
-          <p className="pr-14 text-sm leading-relaxed whitespace-pre-wrap text-whatsapp-ink">
+          <p className="pr-16 text-sm leading-relaxed whitespace-pre-wrap text-whatsapp-ink">
             {body}
           </p>
         </div>
       </TypingBubble>
+
+      {/* ---- The real link ----------------------------------------------
+          Rendered only when the adapter reported a real Razorpay call. It is
+          clickable because a link a merchant cannot open is a screenshot, and
+          the whole point is that this one resolves to Razorpay's own checkout. */}
+      {paymentLink ? (
+        <a
+          href={paymentLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-full items-center gap-2 rounded-md border border-razorpay-blue/40 bg-razorpay-blue/5 px-3 py-2 transition-colors hover:bg-razorpay-blue/10 focus-visible:ring-3 focus-visible:ring-razorpay-blue/30 focus-visible:outline-none"
+        >
+          <RazorpayGlyph className="size-4" />
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-ink">
+              Real Razorpay payment link →
+            </span>
+            <span className="block truncate font-mono text-[11px] text-ink-muted">
+              {paymentLink}
+            </span>
+          </span>
+        </a>
+      ) : null}
 
       <div className="flex flex-wrap gap-1.5">
         {tone ? <MetaBadge label={humanise(tone)} /> : null}
