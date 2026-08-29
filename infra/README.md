@@ -91,18 +91,54 @@ Bicep seeds these as the literal string `REPLACE_ME`, so that no genuine
 credential is ever in this repository or in an Azure deployment history. **The
 backend cannot authenticate a single request until these are set.**
 
+First, give yourself permission. The vault uses **RBAC**, and subscription
+Owner is a control-plane role — it lets you manage the vault and *not* read or
+write its secrets. Without this every command below returns
+`Forbidden … DeniedWithNoValidRBAC`:
+
 ```bash
 VAULT=recover-aa-prod-kv
 
-az keyvault secret set --vault-name $VAULT --name supabase-service-key --value '<service_role key>'
-az keyvault secret set --vault-name $VAULT --name supabase-jwt-secret  --value '<JWT secret>'
-# gemini-api-key can stay REPLACE_ME until Phase 5.
+az role assignment create \
+  --assignee-object-id "$(az ad signed-in-user show --query id -o tsv)" \
+  --assignee-principal-type User \
+  --role 'Key Vault Secrets Officer' \
+  --scope "$(az keyvault show -n $VAULT --query id -o tsv)"
 ```
 
-Both come from **Supabase → Project Settings → API**.
+Then set them:
+
+```bash
+az keyvault secret set --vault-name $VAULT --name supabase-service-key    --value '<service_role key>'
+az keyvault secret set --vault-name $VAULT --name supabase-jwt-secret     --value '<JWT secret>'
+az keyvault secret set --vault-name $VAULT --name gemini-api-key          --value '<Gemini key>'
+az keyvault secret set --vault-name $VAULT --name razorpay-key-id         --value '<rzp_test_…>'
+az keyvault secret set --vault-name $VAULT --name razorpay-key-secret     --value '<Razorpay API secret>'
+az keyvault secret set --vault-name $VAULT --name razorpay-webhook-secret --value '<webhook signing secret>'
+```
+
+The Supabase two come from **Supabase → Project Settings → API**. The Razorpay
+three come from **dashboard.razorpay.com → Settings → API Keys** and **Settings
+→ Webhooks**.
+
+The three `razorpay-*` may stay `REPLACE_ME`: the agent still runs end to end,
+every adapter simulates, and each one reports itself as simulated. The Supabase
+two are not optional — `supabase-service-key` is what the agent loop writes
+with, and a placeholder there means it cannot write at all.
+
+`RAZORPAY_WEBHOOK_MERCHANT_ID` is a plain parameter in
+`main.parameters.json`, not a Key Vault entry — it is a merchant UUID, which
+identifies but does not authorise. A signature-verified webhook carries no
+bearer token, so it is how the receiver knows whose account the event belongs
+to.
+
+> **Prefer piping to typing.** A value on the command line lands in your shell
+> history. `--file` avoids that: `az keyvault secret set … --file ./secret.txt`.
 
 Container Apps caches a resolved secret for the life of a revision, so set
-these *before* the first deploy — or force a new revision afterwards:
+these *before* the first deploy — or force a new revision afterwards. Note that
+`az containerapp update --image`, which is all CI does, creates a new revision
+and therefore picks up changed secrets; a `--set-env-vars` update does too:
 
 ```bash
 az containerapp revision restart \
