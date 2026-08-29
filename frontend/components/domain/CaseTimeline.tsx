@@ -19,6 +19,7 @@ import { HumanHandoffCard } from "@/components/domain/HumanHandoffCard";
 import { PromiseToPayCard } from "@/components/domain/PromiseToPayCard";
 import { StepResultCard, type StepStatus } from "@/components/domain/StepResultCard";
 import { StaggeredItem } from "@/components/ui/StaggeredItem";
+import { STEP_ORDER } from "@/lib/domain/case-steps";
 import type {
   AgentDecision,
   AuditEvent,
@@ -61,18 +62,6 @@ const STEP_ICONS: Record<string, ReactNode> = {
   learn: <BookOpen size={14} />,
   audit: <FileCheck size={14} />,
 };
-
-const STEP_ORDER = [
-  "detect",
-  "diagnose",
-  "uplift_check",
-  "decide",
-  "guardrail",
-  "execute",
-  "listen",
-  "learn",
-  "audit",
-];
 
 const RAIL_STYLES: Record<StepStatus, string> = {
   success: "bg-success-subtle text-success",

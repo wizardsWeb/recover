@@ -1,17 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { CaseStatusBadge } from "@/components/domain/CaseStatusBadge";
+import { CasesTable } from "@/components/domain/CasesTable";
 import { DashboardLiveTicker } from "@/components/domain/DashboardLiveTicker";
-import { PlaybookBadge } from "@/components/domain/PlaybookBadge";
-import { UpliftBucketBadge } from "@/components/domain/UpliftBucketBadge";
+import { RecoveryFunnel } from "@/components/domain/RecoveryFunnel";
 import { FirstTimeDashboard } from "@/components/empty-states/FirstTimeDashboard";
 import { PageHeader } from "@/components/shell/PageHeader";
 import type { CaseListItem, Overview } from "@/lib/api/cases";
 import { getCases, getOverview } from "@/lib/api/cases.server";
-import { formatINR } from "@/lib/utils/format";
+import { funnelFrom } from "@/lib/domain/funnel";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+/**
+ * How many cases the funnel is computed over.
+ *
+ * There is no funnel endpoint, so the stages are derived from case rows. 200 is
+ * enough for the shape to be stable and small enough to stay one cheap request;
+ * the funnel is labelled with what it covers so nobody reads it as all-time.
+ */
+const FUNNEL_WINDOW = 200;
 
 /**
  * The home ticker.
@@ -25,11 +33,16 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function DashboardPage() {
   let overview: Overview | null = null;
   let recentCases: CaseListItem[] = [];
+  let funnelCases: CaseListItem[] = [];
 
   try {
-    const [overviewResult, casesResult] = await Promise.all([getOverview(), getCases({ limit: 5 })]);
+    const [overviewResult, casesResult] = await Promise.all([
+      getOverview(),
+      getCases({ limit: FUNNEL_WINDOW }),
+    ]);
     overview = overviewResult;
-    recentCases = casesResult.cases;
+    funnelCases = casesResult.cases;
+    recentCases = funnelCases.slice(0, 5);
   } catch {
     overview = null;
   }
@@ -43,6 +56,8 @@ export default async function DashboardPage() {
     );
   }
 
+  const stages = funnelFrom(funnelCases);
+
   return (
     <>
       {/* The tiles are seeded with server-fetched numbers and then kept current
@@ -50,36 +65,33 @@ export default async function DashboardPage() {
           qualifies the "Dashboard" heading and its status lives in the client. */}
       <DashboardLiveTicker initial={overview} />
 
-      <div className="mt-8">
+      <section className="mt-8 rounded-card border border-hairline bg-elevated p-6 shadow-card">
+        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+            Recovery funnel
+          </h2>
+          <p className="text-xs text-ink-faint">
+            Last {Math.min(funnelCases.length, FUNNEL_WINDOW)} cases · each stage counts every case
+            that reached it
+          </p>
+        </div>
+        <RecoveryFunnel stages={stages} />
+      </section>
+
+      <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-muted">Recent Cases</h2>
-          <Link href="/app/cases" className="text-xs text-brand hover:underline">
+          <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+            Recent cases
+          </h2>
+          <Link
+            href="/app/cases"
+            className="text-xs text-brand transition-colors hover:text-brand-hover hover:underline"
+          >
             View all →
           </Link>
         </div>
-        <div className="divide-y divide-hairline overflow-hidden rounded-xl border border-hairline bg-elevated">
-          {recentCases.map((row) => (
-            <Link
-              key={row.id}
-              href={`/app/cases/${row.id}`}
-              className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-subtle"
-            >
-              <CaseStatusBadge status={row.status} />
-              {/* Dropped on narrow screens rather than truncated: four badges
-                and an amount in one row leaves the customer name — the thing
-                the row is actually for — with nothing left to show. */}
-              <UpliftBucketBadge bucket={row.uplift_bucket} className="hidden sm:inline-flex" />
-              <span className="flex-1 truncate text-sm font-medium text-ink">
-                {row.customers?.name ?? "Unknown customer"}
-              </span>
-              <PlaybookBadge playbook={row.playbook} />
-              <span className="font-mono text-sm text-ink-muted">
-                {formatINR(row.amount_at_risk_cents)}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </div>
+        <CasesTable cases={recentCases} />
+      </section>
     </>
   );
 }

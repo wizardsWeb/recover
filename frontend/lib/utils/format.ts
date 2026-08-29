@@ -112,3 +112,17 @@ export function formatRupees(rupees: number): string {
 export function formatRupeesCompact(rupees: number): string {
   return formatINRCompact(Math.round(rupees * 100));
 }
+
+const PLAIN_INR = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+
+/**
+ * Paise as grouped rupee digits with **no** currency symbol: `"1,45,000"`.
+ *
+ * The KPI tiles set the `₹` as its own element — smaller, and in the brand blue
+ * — so the glyph and the digits are two different typographic objects. Passing
+ * `formatINR` there would put a second, differently-sized rupee sign inside the
+ * number and there is no way to style it out of a formatted string.
+ */
+export function formatRupeeDigits(paise: number): string {
+  return PLAIN_INR.format(Math.round(paise / 100));
+}
