@@ -144,8 +144,8 @@ export function AuthPanel() {
               aria-current={position === index}
               className={
                 position === index
-                  ? "h-1 w-8 rounded-full bg-white/80 transition-all"
-                  : "h-1 w-4 rounded-full bg-white/25 transition-all hover:bg-white/50"
+                  ? "h-1 w-8 rounded-none bg-white/80 transition-all"
+                  : "h-1 w-4 rounded-none bg-white/25 transition-all hover:bg-white/50"
               }
             />
           ))}

@@ -64,7 +64,7 @@ export function StepResultCard({
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div className="overflow-hidden rounded-card border border-hairline bg-elevated shadow-card">
+    <div className="overflow-hidden rounded-none border border-hairline bg-elevated shadow-card">
       <button
         type="button"
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-subtle"

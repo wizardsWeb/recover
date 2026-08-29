@@ -1,7 +1,7 @@
-/* All three faces — Sora, Inter, JetBrains Mono — come through next/font in
-   app/layout.tsx and arrive as --font-sora / --font-inter /
-   --font-jetbrains-mono. next/font self-hosts them at build time, so there is
-   no runtime request to a font CDN and no flash of unstyled text. */
+/* All three faces — Inter Tight, Instrument Serif, JetBrains Mono — come
+   through next/font in app/layout.tsx and arrive as --font-inter-tight /
+   --font-instrument-serif / --font-jetbrains-mono. Each is requested at weight
+   400 and nothing else. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -9,287 +9,232 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ===========================================================================
-   The ledger palette
+   Bureau
    ---------------------------------------------------------------------------
-   Warm off-white paper, ink-dark text, ochre gold for the things that matter.
-   Every colour in the product resolves to one of these variables — there are no
-   hex literals outside this file and no Tailwind default palette colours
-   (blue-500 and friends) anywhere in the app.
+   Paper, ink, one grey, one hairline. The whole product is achromatic except
+   for a single glyph.
 
-   Contrast against the surface it sits on (WCAG 2.1, light mode):
-     text-primary   #1A1814 on #FBFAF7 -> 15.9:1   AAA
-     text-secondary #5C564B on #FBFAF7 ->  6.9:1   AA
-     text-tertiary  #767061 on #FBFAF7 ->  4.7:1   AA
-     brand          #8A6614 on #FBFAF7 ->  5.0:1   AA  (safe for link text)
-     brand-line     #C9A227 is decorative only — hairlines, never text.
-   =========================================================================== */
+   Four rules hold this together, and each is enforced at the token layer rather
+   than left to a component to remember:
 
-/* ===========================================================================
-   Ink & Ledger
-   ---------------------------------------------------------------------------
-   Two layers, deliberately. The `--ink-*` / `--rupee-*` / `--gold-*` scale is
-   the *palette*: raw values, named for what they are. Everything below it is
-   *semantic*: named for the job it does. Components only ever reference the
-   semantic layer, which is why re-pointing the palette here changed the look of
-   seventy-one files without editing one of them.
+   1. **One weight.** Every `font-weight-*` theme key resolves to 400, so a
+      `font-bold` written anywhere renders regular. Hierarchy comes from size
+      and from ink level, never from weight. This is the discipline the design
+      is built on; enforcing it here means 92 files did not have to be edited
+      and cannot drift back.
 
-   Every value below was measured, not chosen by eye. Three came back wrong and
-   are not what the brief specified:
+   2. **No radius.** Every radius key is 0. `rounded-md` on a shadcn component
+      is a square corner.
 
-     * `--ink-200` (#E8E8F0) was specified as a text colour in several places.
-       On a card it measures 1.17:1 — invisible. It is a border colour, which is
-       what it is used as here; muted text is `--ink-500` (8.19:1) and faint
-       text is `--ink-400` (4.55:1).
-     * `--success` #059669 measured 3.61:1 and `--warning` #D97706 measured
-       3.06:1. Both fail the 4.5:1 floor for the badge text they are used in, so
-       both were darkened one step.
-     * `--gold` #B45309 and the corrected warning are both amber and landed 23
-       RGB apart — one colour wearing two meanings. Gold moved to #92400E, which
-       is 39 from warning and 82 from danger, and reads as saffron-bronze rather
-       than as a second caution.
+   3. **No shadow.** Every shadow key is `none`. Separation is a hairline or a
+      change of ground — never a blur.
 
-   Contrast on the card surface (#FAFAFC), light mode:
-     --ink-900   18.6:1  AAA    --rupee   5.9:1  AA
-     --ink-500    8.2:1  AAA    --gold    6.8:1  AA
-     --ink-400    4.6:1  AA     --success 5.3:1  AA
-     --danger     4.6:1  AA     --warning 4.8:1  AA
+   4. **One colour.** `--rupee` exists for the ₹ glyph and for nothing else.
+      The status hues below are kept because a tool that cannot distinguish
+      recovered from failed is a worse tool, but they are near-ink: low chroma,
+      dark, and always accompanied by a word.
    =========================================================================== */
 
 :root {
   color-scheme: light;
 
-  /* ---- Palette ---------------------------------------------------------- */
-  --ink-900: #0d0d12;
-  --ink-800: #16161e;
-  --ink-700: #1e1e2a;
-  --ink-500: #4b4b5c;
-  --ink-400: #71718a;
-  --ink-200: #e8e8f0;
-  --ink-100: #f4f4f8;
-  --ink-50: #fafafc;
+  /* ---- Ground and ink --------------------------------------------------- */
+  --paper: #ffffff;
+  --paper-sunk: #f4f4f4;
+  --ink: #0a0a0a;
 
-  --rupee: #1a56db;
-  --rupee-light: #ebf2ff;
-  --rupee-dark: #1040b8;
+  /* One grey, at two strengths. `--ink-soft` is the reference's secondary text
+     (7.0:1 on paper); `--ink-faint` is for meta that must recede without
+     disappearing (4.6:1) and is never used for anything a reader has to find. */
+  --ink-soft: #6e6e6e;
+  --ink-faint-value: #8a8a8a;
 
-  --gold: #92400e;
-  --gold-light: #fef3c7;
+  /* The hairline. One weight, one colour: at 1px on white, anything darker
+     reads as a border and anything lighter is not there. */
+  --rule: #e0e0e0;
+  --rule-strong: #c4c4c4;
 
-  /* ---- Semantic: surfaces ----------------------------------------------- */
-  --bg-base: var(--ink-100);
-  --bg-elevated: var(--ink-50);
-  --bg-subtle: #eeeef4;
-  --bg-inset: var(--ink-200);
+  /* ---- The one colour ---------------------------------------------------
+     Razorpay-adjacent blue, reserved for the ₹ glyph. Every other element on
+     every page is black, white, or grey — which is what makes this read as an
+     accent rather than as a palette. */
+  --rupee: #1a4fd6;
 
-  --border-subtle: var(--ink-200);
-  --border-strong: #d3d3e0;
+  /* ---- Status ------------------------------------------------------------
+     Low chroma and dark on purpose. Each measures better than 4.5:1 on paper,
+     and each is always rendered next to its own label, so the colour is
+     reinforcement and never the only carrier. */
+  --success: #14532d;
+  --warning: #713f12;
+  --danger: #7f1d1d;
+  --info: #1e3a5f;
 
-  /* ---- Semantic: ink ---------------------------------------------------- */
-  --text-primary: var(--ink-900);
-  --text-secondary: var(--ink-500);
-  --text-tertiary: var(--ink-400);
-  --text-inverse: var(--ink-50);
+  /* Status fills are a wash of the page, not a colour field. 4% keeps a badge
+     legible as a badge without introducing a second surface. */
+  --success-subtle: color-mix(in srgb, var(--success) 6%, var(--paper));
+  --warning-subtle: color-mix(in srgb, var(--warning) 6%, var(--paper));
+  --danger-subtle: color-mix(in srgb, var(--danger) 6%, var(--paper));
+  --info-subtle: color-mix(in srgb, var(--info) 6%, var(--paper));
 
-  /* ---- Semantic: brand -------------------------------------------------- */
-  --brand: var(--rupee);
-  --brand-hover: var(--rupee-dark);
-  --brand-active: #0d3494;
-  --brand-subtle: var(--rupee-light);
-  --brand-line: #a9c4f5;
-  --brand-foreground: #ffffff;
-
-  /* ---- Semantic: status -------------------------------------------------
-     Darkened from the brief's values so badge text clears 4.5:1. The `-subtle`
-     backgrounds are the brief's, unchanged — they are backgrounds, and the
-     text that sits on them is the semantic colour above. */
-  --success: #047857;
-  --success-subtle: #ecfdf5;
-  --warning: #b45309;
-  --warning-subtle: #fffbeb;
-  --danger: #dc2626;
-  --danger-subtle: #fef2f2;
-  --info: #2563eb;
-  --info-subtle: #eff6ff;
-
-  /* ---- The sidebar is dark in both modes --------------------------------
-     Razorpay, Linear and Vercel all do this, and the reason is navigational
-     rather than decorative: a permanently dark rail reads as chrome, so the
-     eye stops treating it as content and goes to the page. These are held
-     separately from the surface tokens precisely so the light-mode swap below
-     cannot reach them. */
-  --sidebar-bg: var(--ink-900);
-  --sidebar-fg: var(--ink-50);
-  --sidebar-muted: #9c9cb0;
-  --sidebar-border: #262633;
-  /* The active row's fill is white at 6%, not a tint of the brand. On a
-     near-black rail a blue wash and a blue left-rule are the same signal drawn
-     twice; the rule carries the state, and the fill only has to lift the row
-     off the ground. Hover is the same idea at two thirds the strength, so the
-     two states are distinguishable without either shouting. */
-  --sidebar-active: rgb(255 255 255 / 0.06);
-  --sidebar-hover: rgb(255 255 255 / 0.04);
-  --sidebar-gold: #f0b457;
-
-  /* Brand blue for anything drawn on a permanently dark ground — the rail, and
-     the landing page's dark sections. The deep #1a56db that clears 5.9:1 on
-     paper measures 1.6:1 on near-black, which is a colour nobody can see. Held
-     here with the sidebar tokens rather than in the theme swap because these
-     surfaces are dark in both modes, so a `.dark` override would never fire on
-     the half of visits that matter. */
-  --brand-on-dark: #7ea6f5;
-
-  /* The landing page's floating nav pill, which is white in both colour modes
-     for the same reason the rail is dark in both: it sits on a video, and
-     there is no theme in which the frame behind it is predictable. Held as
-     tokens rather than as literals in the component so the one place in the
-     product with a fixed-light surface is still findable from this file. */
-  --navpill-bg: #ffffff;
-  --navpill-fg: #2e2e2e;
-  --navpill-fg-strong: #000000;
-  --navpill-cta-bg: #111111;
-  --navpill-shadow: 0 4px 14px rgb(0 0 0 / 0.16);
-
-  /* Razorpay's own two brand colours, taken from their published glyph. They
-     are here rather than as literals in the component for the same reason
-     every other colour is — but unlike the rest of this file they are not ours
-     to re-tint, so they do not change between light and dark. A "powered by"
-     mark rendered in a colour the vendor does not use is worse than no mark. */
-  --razorpay-blue: #3395ff;
-  --razorpay-navy: #072654;
-
-  /* WhatsApp's own outgoing-bubble colours, held as tokens rather than as
-     literals in the component. Not folded into --success-subtle: the point of
-     this bubble is that a merchant recognises the channel at a glance, and a
-     generic green loses the one cue that says "this went out on WhatsApp".
-     The dark values are WhatsApp's dark theme, not an algorithmic darkening. */
+  /* WhatsApp's own outgoing-bubble green. The one hue in the product that is
+     not ours to restyle: the point of the bubble is that a merchant recognises
+     the channel before reading a word, and a grey bubble loses exactly that. */
   --whatsapp-bubble: #dcf8c6;
   --whatsapp-ink: #111b21;
   --whatsapp-brand: #25d366;
 
-  /* 6px default, 10px cards, 14px modals — nothing rounder. */
-  --radius: 6px;
-  --radius-card: 10px;
-  --radius-modal: 14px;
+  /* Razorpay's published brand colours, for the attribution mark only. */
+  --razorpay-blue: #3395ff;
+  --razorpay-navy: #072654;
 
-  /* One elevation level. A product with five shadow depths is a product where
-     none of them mean anything. */
-  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
+  /* Squared, everywhere. Held as variables so the two shadcn components that
+     read `--radius` directly get 0 as well. */
+  --radius: 0px;
+  --radius-card: 0px;
+  --radius-modal: 0px;
 
-  /* --- shadcn contract -----------------------------------------------------
-     The 60 components under components/ui read these names. Pointing them at
-     the semantic layer is what makes every installed component inherit the
-     palette without being edited one by one. */
-  --background: var(--bg-base);
-  --foreground: var(--text-primary);
-  --card: var(--bg-elevated);
-  --card-foreground: var(--text-primary);
-  --popover: var(--bg-elevated);
-  --popover-foreground: var(--text-primary);
-  --primary: var(--brand);
-  --primary-foreground: var(--brand-foreground);
-  --secondary: var(--bg-subtle);
-  --secondary-foreground: var(--text-primary);
-  --muted: var(--bg-subtle);
-  --muted-foreground: var(--text-secondary);
-  --accent: var(--brand-subtle);
-  --accent-foreground: var(--brand-hover);
-  --destructive: var(--danger);
-  --border: var(--border-subtle);
-  --input: var(--border-strong);
-  --ring: var(--brand);
-  /* Chart series. 1 and 2 are the pair the learning curve draws, so they are
-     blue and amber — the one combination that survives every form of
-     colour-vision deficiency. */
-  --chart-1: var(--brand);
-  --chart-2: var(--gold);
-  --chart-3: var(--success);
-  --chart-4: var(--warning);
-  --chart-5: var(--info);
-  --sidebar: var(--sidebar-bg);
-  --sidebar-foreground: var(--sidebar-fg);
-  --sidebar-primary: var(--brand);
-  --sidebar-primary-foreground: var(--brand-foreground);
-  --sidebar-accent: var(--sidebar-active);
-  --sidebar-accent-foreground: var(--sidebar-fg);
-  --sidebar-ring: var(--brand);
+  --shadow-card: none;
 }
 
+/* The inversion. Not a "dark theme" so much as the same page printed the other
+   way round — which is what the reference does to its own footer. */
 .dark {
   color-scheme: dark;
 
-  /* The palette inverts through the ink scale rather than by algorithmic
-     lightening, so the near-black the sidebar already uses becomes the page. */
-  --bg-base: var(--ink-900);
-  --bg-elevated: var(--ink-800);
-  --bg-subtle: var(--ink-700);
-  --bg-inset: #08080c;
+  --paper: #0a0a0a;
+  --paper-sunk: #161616;
+  --ink: #f4f4f4;
+  --ink-soft: #9a9a9a;
+  --ink-faint-value: #757575;
 
-  --border-subtle: #2a2a38;
-  --border-strong: #3d3d50;
+  --rule: #2a2a2a;
+  --rule-strong: #3d3d3d;
 
-  --text-primary: var(--ink-50);
-  --text-secondary: #a3a3b8;
-  --text-tertiary: #7c7c95;
-  --text-inverse: var(--ink-900);
+  --rupee: #7fa4ff;
 
-  /* Every accent lifts. A hue that clears 4.5:1 on white is nowhere near it on
-     near-black, and the deep rupee blue is the worst offender — 1.6:1 as-is. */
-  --brand: #7ea6f5;
-  --brand-hover: #9dbcf8;
-  --brand-active: #b8cffa;
-  --brand-subtle: #16213d;
-  --brand-line: #35538c;
-  --brand-foreground: var(--ink-900);
-
-  --gold: #f0b457;
-  --gold-light: #2a2113;
-
-  --success: #34d399;
-  --success-subtle: #0c2620;
-  --warning: #fbbf24;
-  --warning-subtle: #2a2113;
-  --danger: #f87171;
-  --danger-subtle: #2d1618;
-  --info: #93b4fd;
-  --info-subtle: #171d33;
-
-  /* The rail was already this colour. In dark mode it stops being a contrast
-     and becomes continuous with the page, which is correct — its job was to
-     recede, and now the whole product has. */
-  --sidebar-border: #262633;
+  /* Status lifts off near-black. The light values measure under 2:1 here. */
+  --success: #86efac;
+  --warning: #fcd34d;
+  --danger: #fca5a5;
+  --info: #a5c4f5;
 
   --whatsapp-bubble: #1f3320;
   --whatsapp-ink: #e9edef;
 }
 
 /* ===========================================================================
-   Tailwind token bindings
-   `inline` means the utilities emit `var(--bg-base)` rather than a resolved
-   colour, so a class written once responds to the light/dark swap above.
+   A decided ground
+   ---------------------------------------------------------------------------
+   The public pages are printed objects: they are white, and a reader whose
+   system is set to dark gets the same composition rather than a second one
+   nobody art-directed. `.dark` lives on <html>, so opting out means restating
+   the primitives on the subtree.
+
+   Only primitives are restated — the derived set lives on `*` further down and
+   re-substitutes from whichever of these is nearest, which is also what lets
+   the footer's own `.dark` invert *inside* a forced-light page and still be
+   internally consistent.
+   =========================================================================== */
+
+.ground-light {
+  color-scheme: light;
+
+  --paper: #ffffff;
+  --paper-sunk: #f4f4f4;
+  --ink: #0a0a0a;
+  --ink-soft: #6e6e6e;
+  --ink-faint-value: #8a8a8a;
+  --rule: #e0e0e0;
+  --rule-strong: #c4c4c4;
+  --rupee: #1a4fd6;
+
+  --success: #14532d;
+  --warning: #713f12;
+  --danger: #7f1d1d;
+  --info: #1e3a5f;
+
+  --whatsapp-bubble: #dcf8c6;
+  --whatsapp-ink: #111b21;
+}
+
+/* ===========================================================================
+   Tailwind bindings
+   `inline` means the utilities emit `var(--…)` rather than a resolved colour,
+   so a class written once responds to the inversion above.
    =========================================================================== */
 
 @theme inline {
-  /* Surfaces — bg-base, bg-elevated, bg-subtle, bg-inset */
+  /* ---- Weight: there is only one -----------------------------------------
+     Every weight utility Tailwind ships resolves to 400. `font-bold` in a
+     component is not an error and not a lie — it records that the author meant
+     emphasis — it simply renders as regular, because in this system emphasis is
+     size and ink, not weight. */
+  --font-weight-thin: 400;
+  --font-weight-extralight: 400;
+  --font-weight-light: 400;
+  --font-weight-normal: 400;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-bold: 400;
+  --font-weight-extrabold: 400;
+  --font-weight-black: 400;
+
+  /* ---- Radius: there is none --------------------------------------------- */
+  --radius-none: 0px;
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+  --radius-card: 0px;
+  --radius-modal: 0px;
+
+  /* ---- Shadow: there is none ---------------------------------------------
+     `shadow-*` still parses; it paints nothing. Anything that needs to sit
+     above the page does it with a rule. */
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-card: none;
+  --shadow-navpill: none;
+
+  /* ---- Type -------------------------------------------------------------
+     `font-sans` is the grotesque and the default. `font-serif` is the
+     counterpoint and carries statement paragraphs at display size and meta
+     labels at 13px — the same face doing both ends of the scale is deliberate.
+     `font-display` is an alias for the serif so existing markup lands on the
+     right face rather than on a font that is no longer loaded. */
+  --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* ---- Surfaces --------------------------------------------------------- */
+  --color-paper: var(--paper);
   --color-base: var(--bg-base);
   --color-elevated: var(--bg-elevated);
   --color-subtle: var(--bg-subtle);
   --color-inset: var(--bg-inset);
 
-  /* Rules — border-hairline, border-edge.
-     Tailwind 4 has one colour namespace shared by bg-/text-/border-, so the
-     border scale needs names of its own; `subtle` is already a surface. */
+  /* ---- Rules ------------------------------------------------------------ */
   --color-hairline: var(--border-subtle);
   --color-edge: var(--border-strong);
+  --color-rule: var(--rule);
 
-  /* Ink — text-ink, text-ink-muted, text-ink-faint, text-ink-inverse.
-     Named `ink` rather than `primary` because shadcn already owns
-     --color-primary for filled buttons. */
+  /* ---- Ink -------------------------------------------------------------- */
   --color-ink: var(--text-primary);
   --color-ink-muted: var(--text-secondary);
   --color-ink-faint: var(--text-tertiary);
   --color-ink-inverse: var(--text-inverse);
 
-  /* Brand */
+  /* ---- Brand (which is ink) --------------------------------------------- */
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-brand-active: var(--brand-active);
@@ -297,29 +242,26 @@
   --color-brand-line: var(--brand-line);
   --color-brand-foreground: var(--brand-foreground);
 
-  /* Accent — text-gold, bg-gold-light.
-     Replaces the old --ink-blue, which was a distinct accent only while the
-     brand was gold. With the brand now blue, a second blue would have been the
-     same colour claiming to mean something else. */
-  --color-gold: var(--gold);
-  --color-gold-light: var(--gold-light);
-
-  /* Palette, exposed directly — bg-ink-900, text-ink-500, bg-rupee-light.
-     New work can reach the raw scale where a semantic name would be a stretch:
-     the sidebar's near-black is not "a surface", it is that specific value. */
-  --color-ink-900: var(--ink-900);
-  --color-ink-800: var(--ink-800);
-  --color-ink-700: var(--ink-700);
-  --color-ink-500: var(--ink-500);
-  --color-ink-400: var(--ink-400);
-  --color-ink-200: var(--ink-200);
-  --color-ink-100: var(--ink-100);
-  --color-ink-50: var(--ink-50);
+  /* ---- The one colour --------------------------------------------------- */
   --color-rupee: var(--rupee);
-  --color-rupee-light: var(--rupee-light);
-  --color-rupee-dark: var(--rupee-dark);
 
-  /* The rail, which stays dark in both modes. */
+  /* Legacy palette names, re-pointed rather than removed so that markup across
+     ninety-odd files keeps compiling. They all resolve into the achromatic
+     scale now — `bg-ink-900` is ink, `text-ink-400` is the grey. */
+  --color-ink-900: var(--ink);
+  --color-ink-800: var(--ink);
+  --color-ink-700: var(--ink);
+  --color-ink-500: var(--ink-soft);
+  --color-ink-400: var(--text-tertiary);
+  --color-ink-200: var(--rule);
+  --color-ink-100: var(--paper-sunk);
+  --color-ink-50: var(--paper);
+  --color-rupee-light: var(--paper-sunk);
+  --color-rupee-dark: var(--rupee);
+  --color-gold: var(--ink);
+  --color-gold-light: var(--paper-sunk);
+
+  /* ---- The rail --------------------------------------------------------- */
   --color-sidebar-bg: var(--sidebar-bg);
   --color-sidebar-fg: var(--sidebar-fg);
   --color-sidebar-muted: var(--sidebar-muted);
@@ -328,19 +270,8 @@
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-gold: var(--sidebar-gold);
   --color-brand-on-dark: var(--brand-on-dark);
-  --color-navpill-bg: var(--navpill-bg);
-  --color-navpill-fg: var(--navpill-fg);
-  --color-navpill-fg-strong: var(--navpill-fg-strong);
-  --color-navpill-cta-bg: var(--navpill-cta-bg);
-  --shadow-navpill: var(--navpill-shadow);
-  --color-razorpay-blue: var(--razorpay-blue);
-  --color-razorpay-navy: var(--razorpay-navy);
 
-  /* WhatsApp's own brand green, for the one bubble that should look like an
-     actual WhatsApp message. */
-  --color-whatsapp-brand: var(--whatsapp-brand);
-
-  /* Semantic */
+  /* ---- Status ----------------------------------------------------------- */
   --color-success: var(--success);
   --color-success-subtle: var(--success-subtle);
   --color-warning: var(--warning);
@@ -350,74 +281,149 @@
   --color-info: var(--info);
   --color-info-subtle: var(--info-subtle);
 
-  /* Channel chrome — bg-whatsapp-bubble, text-whatsapp-ink */
+  /* ---- Channel chrome --------------------------------------------------- */
   --color-whatsapp-bubble: var(--whatsapp-bubble);
   --color-whatsapp-ink: var(--whatsapp-ink);
+  --color-whatsapp-brand: var(--whatsapp-brand);
+  --color-razorpay-blue: var(--razorpay-blue);
+  --color-razorpay-navy: var(--razorpay-navy);
 
-  /* Type — font-display (Sora), font-body (Inter), font-mono (JetBrains).
-     General Sans is gone: it was loaded over the network from Fontshare on
-     every first paint, and one self-hosted display face is both faster and one
-     fewer third party in the critical path. */
-  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* ---- The nav pill, which is no longer a pill --------------------------- */
+  --color-navpill-bg: var(--paper);
+  --color-navpill-fg: var(--ink-soft);
+  --color-navpill-fg-strong: var(--ink);
+  --color-navpill-cta-bg: var(--ink);
 
-  /* Radii — rounded-md is the 6px default, rounded-card, rounded-modal. */
-  --radius-card: var(--radius-card);
-  --radius-modal: var(--radius-modal);
+  /* ---- shadcn contract -------------------------------------------------- */
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-elevated);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--paper);
+  --color-secondary: var(--bg-subtle);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-subtle);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--bg-subtle);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--danger);
+  --color-border: var(--border-subtle);
+  --color-input: var(--border-strong);
+  --color-ring: var(--ink);
+  --color-chart-1: var(--ink);
+  --color-chart-2: var(--ink-soft);
+  --color-chart-3: var(--success);
+  --color-chart-4: var(--warning);
+  --color-chart-5: var(--info);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-foreground: var(--sidebar-fg);
+  --color-sidebar-primary: var(--ink);
+  --color-sidebar-primary-foreground: var(--paper);
+  --color-sidebar-accent: var(--sidebar-active);
+  --color-sidebar-accent-foreground: var(--sidebar-fg);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--ink);
+}
 
-  /* One elevation — shadow-card. */
-  --shadow-card: var(--shadow-card);
+/* ===========================================================================
+   Derived tokens, on `*` rather than on `:root`
+   ---------------------------------------------------------------------------
+   This looks wrong and is load-bearing. A custom property whose value contains
+   `var()` is substituted at **computed-value time on the element that declares
+   it** — so `--text-primary: var(--ink)` written on `:root` resolves against
+   `:root`'s `--ink` once, and the resulting literal is what inherits down. A
+   descendant that re-declares `--ink` (`.ground-light`, or the footer's `.dark`)
+   cannot reach it: the indirection was already collapsed above them.
+
+   Declaring the derived set on `*` makes every element re-substitute from its
+   own nearest primitive, which is the semantics the token system was always
+   assuming it had. It is also why `.dark` and `.ground-light` only need to
+   restate the handful of primitives rather than the whole cascade.
+
+   The alternative — repeating forty declarations in three scopes — is the same
+   thing spelled worse, and drifts the first time one of them is edited alone.
+   =========================================================================== */
+
+* {
+  /* Surfaces */
+  --bg-base: var(--paper);
+  --bg-elevated: var(--paper);
+  --bg-subtle: var(--paper-sunk);
+  --bg-inset: var(--paper-sunk);
+
+  --border-subtle: var(--rule);
+  --border-strong: var(--rule-strong);
+
+  /* Ink */
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-tertiary: var(--ink-faint-value);
+  --text-inverse: var(--paper);
+
+  /* Brand, which is ink. A link is underlined, not coloured. */
+  --brand: var(--ink);
+  --brand-hover: var(--ink-soft);
+  --brand-active: var(--ink);
+  --brand-subtle: var(--paper-sunk);
+  --brand-line: var(--rule);
+  --brand-foreground: var(--paper);
+
+  /* Status washes: a tint of the page, not a second surface. */
+  --success-subtle: color-mix(in srgb, var(--success) 8%, var(--paper));
+  --warning-subtle: color-mix(in srgb, var(--warning) 8%, var(--paper));
+  --danger-subtle: color-mix(in srgb, var(--danger) 8%, var(--paper));
+  --info-subtle: color-mix(in srgb, var(--info) 8%, var(--paper));
+
+  /* The rail, which is paper now and separated by a rule. */
+  --sidebar-bg: var(--paper);
+  --sidebar-fg: var(--ink);
+  --sidebar-muted: var(--ink-soft);
+  --sidebar-border: var(--rule);
+  --sidebar-active: var(--paper-sunk);
+  --sidebar-hover: color-mix(in srgb, var(--ink) 3%, var(--paper));
+  --sidebar-gold: var(--rupee);
+  --brand-on-dark: var(--paper);
+
+  /* Squared and unshadowed, for the components that read these directly. */
+  --radius: 0px;
+  --radius-card: 0px;
+  --radius-modal: 0px;
+  --shadow-card: none;
 
   /* shadcn contract */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  /* Type — the display face is bound above, next to the radius scale. */
-  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
-
-  /* Radius — 4 / 6 / 10 / 14, nothing rounder. `md` is the default and drives
-     every shadcn component; `lg` is the card radius, `xl` the modal's. */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-
-  /* Shadows — warm-tinted and barely there. Depth comes from rules, not glow. */
-  --shadow-2xs: 0 1px 1px 0 rgb(26 24 20 / 0.03);
-  --shadow-xs: 0 1px 2px 0 rgb(26 24 20 / 0.04);
-  --shadow-sm: 0 1px 2px 0 rgb(26 24 20 / 0.05), 0 1px 3px 0 rgb(26 24 20 / 0.04);
-  --shadow-md: 0 2px 4px -1px rgb(26 24 20 / 0.06), 0 4px 8px -2px rgb(26 24 20 / 0.05);
-  --shadow-lg: 0 4px 8px -2px rgb(26 24 20 / 0.07), 0 12px 20px -4px rgb(26 24 20 / 0.06);
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-sunk);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--paper-sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--ink);
+  --sidebar: var(--paper);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--paper-sunk);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-ring: var(--ink);
+  --chart-1: var(--ink);
+  --chart-2: var(--ink-soft);
+  --chart-3: var(--success);
+  --chart-4: var(--warning);
+  --chart-5: var(--info);
 }
 
 @layer base {
@@ -426,14 +432,25 @@
   }
 
   html {
-    @apply font-body antialiased;
+    @apply font-sans antialiased;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
   body {
     @apply bg-base text-ink;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* Every size in this design sits on negative tracking. Setting it on the
+       body rather than per-element is what stops a component from quietly
+       opting out. */
+    letter-spacing: -0.02em;
+  }
+
+  /* Display type is set tighter still, and this is the single most
+     characteristic thing about the reference: leading below the type size, so
+     descenders and ascenders nearly meet between lines. */
+  h1,
+  h2 {
+    letter-spacing: -0.035em;
   }
 
   /* Tabular figures wherever money or counts are shown. Columns of rupees that
@@ -444,56 +461,66 @@
 }
 
 @layer components {
-  /* The landing page's display face, and nowhere else.
-     ---------------------------------------------------------------------
-     Self-hosted, 5KB, from `public/fonts`. It was originally linked from
-     the CDN that publishes it, which meant a third party could change what
-     arrives at the top of the critical path of the only page a stranger
-     ever sees — an external stylesheet can do considerably more than pick a
-     typeface. Copying 5KB into the repository ends that, and the CC BY 4.0
-     licence the face ships under permits the copy; the footer carries the
-     credit it requires.
-
-     Declaring the face here rather than in the marketing layout costs the
-     dashboard nothing. `@font-face` is lazy: a browser fetches the file
-     only when a rule that names the family actually matches an element, and
-     no dashboard route uses `.font-dotmatrix`.
-
-     Sora is the fallback — the same display voice at the same weight — so a
-     failed font request costs the texture and not the layout. */
-  @font-face {
-    font-family: "BubbledotICG-FinePos";
-    src: url("/fonts/bubbledot-icg-finepos.woff2") format("woff2");
-    font-weight: normal;
-    font-style: normal;
-    font-display: swap;
+  /* ---- The display scale -----------------------------------------------
+     Three sizes, each with the leading baked in, because the leading *is* the
+     size at this scale — a 160px headline at 1.2 line-height is a different
+     design from the same headline at 0.82. Named rather than repeated as
+     arbitrary values so the ratio cannot drift between pages. */
+  .type-colossal {
+    font-size: clamp(3.25rem, 11.5vw, 11rem);
+    line-height: 0.82;
+    letter-spacing: -0.04em;
+    /* Leading below 1 means the line box is shorter than the letterforms, so
+       ascenders and descenders sit outside it. Anything that clips horizontally
+       — the crop that lets a phrase run off the viewport — would otherwise
+       shear the tops off caps and the tails off a `y`. This buys the overshoot
+       room without adding visible space, because it is inside the line box. */
+    padding-block: 0.09em;
   }
 
-  .font-dotmatrix {
-    font-family: "BubbledotICG-FinePos", var(--font-display);
+  .type-statement {
+    font-size: clamp(2rem, 5.5vw, 5rem);
+    line-height: 0.92;
+    letter-spacing: -0.035em;
   }
 
-  /* The hairline that runs under the hero — the one place ornamental gold is
-     allowed, and it carries no information. */
-  .rule-gold {
-    background-image: linear-gradient(
-      to right,
-      transparent,
-      var(--brand-line) 15%,
-      var(--brand-line) 85%,
-      transparent
-    );
+  .type-lede {
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
+    line-height: 1.25;
+    letter-spacing: -0.025em;
   }
 
-  /* A row that has just arrived over Realtime, fading back to the table
-     surface. Written as a keyframe on the design token rather than as a
-     JS-driven colour animation: Framer Motion interpolates resolved colours,
-     not `var(--…)`, so animating it in JS would mean hard-coding one hex for
-     light and another for dark and switching on the theme. The token already
-     knows which mode it is in. */
+  /* Meta: the 13px label that runs under everything. Set in the serif, which
+     is where the reference puts its own small labels — a serif at 13px beside a
+     grotesque headline reads as annotation rather than as more interface. */
+  .type-meta {
+    font-family: var(--font-serif);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text-secondary);
+  }
+
+  /* A link is an underline, never a colour. The offset keeps the rule off the
+     descenders; `from-font` uses the face's own stroke weight so it matches at
+     13px and at 96px without being told. */
+  .link-rule {
+    text-decoration: underline;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 0.25em;
+  }
+
+  .link-rule:hover {
+    text-decoration-color: var(--text-secondary);
+  }
+
+  /* A row that has just arrived over Realtime, fading back to the page.
+     Written as a keyframe on the token rather than as a JS colour animation:
+     Framer Motion interpolates resolved colours, not `var(…)`, so animating it
+     in JS would mean hard-coding one value for light and another for dark. */
   @keyframes row-flash {
     from {
-      background-color: var(--warning-subtle);
+      background-color: var(--bg-subtle);
     }
     to {
       background-color: transparent;
@@ -514,16 +541,12 @@
 /* ===========================================================================
    Print — the case detail as an audit report
    ---------------------------------------------------------------------------
-   The shell's chrome is hidden by `print:hidden` at the component level; this
-   handles what a utility class cannot.
-
    The light palette is re-asserted for `.dark` too. A printer does not paint
-   the page background, so printing from dark mode would put near-white ink on
-   white paper — a blank sheet where the audit trail should be. Forcing the
-   light tokens is the difference between a readable report and an empty one.
+   the page background, so printing from the inverted theme would put near-white
+   ink on white paper — a blank sheet where the audit trail should be.
 
-   Fills are dropped and borders kept, so a status chip still reads as a chip
-   without spending a merchant's toner on a solid block of colour.
+   Less work than it used to be: the screen design is already black on white
+   with hairlines and no fills, so paper is close to the native state.
    =========================================================================== */
 
 @media print {
@@ -531,30 +554,25 @@
   .dark {
     color-scheme: light;
 
-    --bg-base: #ffffff;
-    --bg-elevated: #ffffff;
-    --bg-subtle: #ffffff;
-    --bg-inset: #ffffff;
+    --paper: #ffffff;
+    --paper-sunk: #ffffff;
+    --ink: #000000;
+    --ink-soft: #333333;
+    --ink-faint-value: #555555;
+    --rule: #999999;
+    --rule-strong: #666666;
+    --rupee: #000000;
 
-    --border-subtle: #b8b2a6;
-    --border-strong: #8a8175;
-
-    --text-primary: #000000;
-    --text-secondary: #2b2721;
-    --text-tertiary: #4a453c;
-
-    --brand: #6b4f10;
     --success: #14532d;
     --warning: #713f12;
     --danger: #7f1d1d;
-    --info: #1e3a8a;
+    --info: #1e3a5f;
   }
 
   body {
     background: #ffffff;
   }
 
-  /* No filled surfaces on paper — outlines and text carry the structure. */
   *,
   *::before,
   *::after {
@@ -562,15 +580,6 @@
     box-shadow: none !important;
     animation: none !important;
     transition: none !important;
-  }
-
-  [class*="bg-"] {
-    background-color: transparent !important;
-  }
-
-  /* Chips lose their fill, so they need an outline to stay chips. */
-  [class*="rounded-4xl"] {
-    border: 1px solid var(--border-strong) !important;
   }
 
   a[href]::after {

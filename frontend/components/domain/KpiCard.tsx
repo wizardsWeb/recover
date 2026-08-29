@@ -74,7 +74,7 @@ export function KpiCard({
     <LiftCard staggered={staggered} className={className}>
       <div
         className={cn(
-          "h-full rounded-card border border-hairline border-l-[3px] bg-elevated p-5 shadow-card",
+          "h-full rounded-none border border-hairline border-l-[3px] bg-elevated p-5 shadow-card",
           TONE_RULE[tone],
         )}
       >

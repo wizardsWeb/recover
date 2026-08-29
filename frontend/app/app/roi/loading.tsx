@@ -26,7 +26,7 @@ export default function ROILoading() {
               <Skeleton className="h-10 w-44" />
               <Skeleton className="h-3 w-full max-w-[280px]" />
             </div>
-            <Skeleton className="hidden size-5 self-center rounded-full sm:block" />
+            <Skeleton className="hidden size-5 self-center rounded-none sm:block" />
             <div className="space-y-3">
               <Skeleton className="h-2.5 w-44" />
               <Skeleton className="h-12 w-56" />
@@ -45,7 +45,7 @@ export default function ROILoading() {
                     <Skeleton className="h-4 w-28" />
                     <Skeleton className="h-3 w-full max-w-[240px]" />
                   </div>
-                  <Skeleton className="h-5 w-14 shrink-0 rounded-4xl" />
+                  <Skeleton className="h-5 w-14 shrink-0 rounded-none" />
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 border-t border-hairline pt-3 sm:grid-cols-4">
                   {FIELDS.map((field) => (

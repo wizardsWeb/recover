@@ -24,7 +24,7 @@ export default async function CasesPage() {
     return (
       <>
         <PageHeader title="Cases" subtitle="Could not reach the API" />
-        <div className="rounded-card border border-hairline bg-elevated p-12 text-center">
+        <div className="rounded-none border border-hairline bg-elevated p-12 text-center">
           <p className="text-sm text-ink-muted">Could not load cases.</p>
           <p className="mt-1 text-xs text-ink-faint">
             The API did not respond. Refresh once it is back.

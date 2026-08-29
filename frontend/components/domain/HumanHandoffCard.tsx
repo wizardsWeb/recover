@@ -66,16 +66,16 @@ export function HumanHandoffCard({ payload }: { payload: HandoffPayload }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="rounded-4xl bg-elevated px-2 py-0.5 text-[10px] font-medium text-ink">
+        <span className="rounded-none bg-elevated px-2 py-0.5 text-[10px] font-medium text-ink">
           {payload.reason_label ?? REASON_LABELS[reason] ?? reason}
         </span>
         {customer.ltv_cents ? (
-          <span className="rounded-4xl bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink">
+          <span className="rounded-none bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink">
             LTV {formatINR(customer.ltv_cents)}
           </span>
         ) : null}
         {customer.tenure_days ? (
-          <span className="rounded-4xl bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink-muted">
+          <span className="rounded-none bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink-muted">
             {customer.tenure_days} days
           </span>
         ) : null}

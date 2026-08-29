@@ -79,7 +79,7 @@ function CurveTooltip({
         ].map((series) => (
           <div key={series.key} className="flex items-center gap-2">
             <span
-              className="inline-block h-2 w-2 rounded-full"
+              className="inline-block h-2 w-2 rounded-none"
               style={{ background: series.color }}
             />
             <span className="text-ink-muted">{series.name}</span>
@@ -95,7 +95,7 @@ function LegendSwatch({ dashed, color, label }: { dashed?: boolean; color: strin
   return (
     <span className="flex items-center gap-1.5 text-xs">
       <span
-        className="inline-block h-0.5 w-4 rounded-4xl"
+        className="inline-block h-0.5 w-4 rounded-none"
         style={
           dashed
             ? {
@@ -133,7 +133,7 @@ export function BatchLearningCurve({
         <button
           type="button"
           onClick={() => setShowTable((open) => !open)}
-          className="ml-auto rounded-4xl border border-hairline px-2 py-0.5 text-[10px] text-ink-muted transition-colors hover:bg-subtle"
+          className="ml-auto rounded-none border border-hairline px-2 py-0.5 text-[10px] text-ink-muted transition-colors hover:bg-subtle"
           aria-expanded={showTable}
         >
           {showTable ? "Hide data" : "View as table"}

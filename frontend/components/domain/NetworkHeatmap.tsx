@@ -194,7 +194,7 @@ export function NetworkHeatmap({ initial }: NetworkHeatmapProps) {
 
       <div
         className={cn(
-          "relative overflow-x-auto rounded-card border border-hairline bg-elevated p-3 shadow-card transition-opacity",
+          "relative overflow-x-auto rounded-none border border-hairline bg-elevated p-3 shadow-card transition-opacity",
           loading && "opacity-60",
         )}
       >

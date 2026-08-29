@@ -81,8 +81,8 @@ export function EventLogTail() {
       actions={
         <span className="flex items-center gap-1.5 text-xs text-ink-faint">
           <span className="relative flex size-1.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-success" />
+            <span className="absolute inline-flex size-full animate-ping rounded-none bg-success opacity-60" />
+            <span className="relative inline-flex size-1.5 rounded-none bg-success" />
           </span>
           Auto-refresh: on
         </span>

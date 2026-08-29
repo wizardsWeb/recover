@@ -27,7 +27,7 @@ export default function CasesLoading() {
         <Skeleton className="h-4 w-40" />
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-hairline bg-elevated">
+      <div className="overflow-x-auto rounded-none border border-hairline bg-elevated">
         <Table>
           <TableHeader>
             <TableRow className="border-hairline">
@@ -50,16 +50,16 @@ export default function CasesLoading() {
             {ROWS.map((row) => (
               <TableRow key={row} className="border-hairline">
                 <TableCell>
-                  <Skeleton className="h-5 w-20 rounded-4xl" />
+                  <Skeleton className="h-5 w-20 rounded-none" />
                 </TableCell>
                 <TableCell>
-                  <Skeleton className="h-5 w-24 rounded-4xl" />
+                  <Skeleton className="h-5 w-24 rounded-none" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-32" />
                 </TableCell>
                 <TableCell>
-                  <Skeleton className="h-5 w-24 rounded-4xl" />
+                  <Skeleton className="h-5 w-24 rounded-none" />
                 </TableCell>
                 <TableCell className="flex justify-end">
                   <Skeleton className="h-4 w-16" />

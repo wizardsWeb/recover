@@ -159,7 +159,7 @@ export function TestModePanel() {
       {/* ---- Wiring status ---------------------------------------------------
           First, because everything below is only interesting if this says the
           integration is live. */}
-      <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+      <section className="rounded-none border border-hairline bg-elevated p-5 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
@@ -256,7 +256,7 @@ export function TestModePanel() {
       {/* ---- The mock bank page ---------------------------------------------
           Above the cards, not below, because it is the thing people get wrong
           first and no card number makes sense without it. */}
-      <section className="rounded-card border border-info/30 bg-info-subtle p-4">
+      <section className="rounded-none border border-info/30 bg-info-subtle p-4">
         <p className="flex items-start gap-2 text-sm leading-relaxed text-info">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>
@@ -269,7 +269,7 @@ export function TestModePanel() {
       </section>
 
       {/* ---- Test cards ---------------------------------------------------- */}
-      <section className="rounded-card border border-hairline bg-elevated shadow-card">
+      <section className="rounded-none border border-hairline bg-elevated shadow-card">
         <div className="border-b border-hairline p-5">
           <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
             Test cards
@@ -314,7 +314,7 @@ export function TestModePanel() {
       </section>
 
       {/* ---- Test UPI ------------------------------------------------------ */}
-      <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+      <section className="rounded-none border border-hairline bg-elevated p-5 shadow-card">
         <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">Test UPI</h2>
         <p className="mt-1 text-sm text-ink-muted">
           These resolve without a mock bank page, which makes them the fastest way to demo both

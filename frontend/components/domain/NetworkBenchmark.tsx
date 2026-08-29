@@ -76,7 +76,7 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
             models exactly one. */}
         <Progress value={position} className="relative block" aria-label="Your recovery rate against the network">
           <ProgressTrack className="h-2 overflow-visible bg-subtle">
-            <ProgressIndicator className="rounded-full bg-brand-subtle" />
+            <ProgressIndicator className="rounded-none bg-brand-subtle" />
 
             {/* Median and top decile as tick marks on the same axis, so the
                 merchant's position is read against them rather than described. */}
@@ -101,7 +101,7 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
               </Tooltip>
             ))}
             <span
-              className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-base bg-brand"
+              className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-none border-2 border-base bg-brand"
               style={{ left: `${position}%` }}
               aria-hidden
             />
@@ -124,7 +124,7 @@ function Distribution({ data }: { data: BenchmarkResponse }) {
 
 export function NetworkBenchmark({ data }: { data: BenchmarkResponse }) {
   return (
-    <section className="rounded-card border border-hairline bg-elevated p-5 shadow-card">
+    <section className="rounded-none border border-hairline bg-elevated p-5 shadow-card">
       <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
         Your recovery rate against the network
       </h2>
@@ -162,7 +162,7 @@ export function NetworkBenchmark({ data }: { data: BenchmarkResponse }) {
         <ul className="mt-2 space-y-1.5">
           {INSIGHTS.map((insight) => (
             <li key={insight} className="flex gap-2 text-xs leading-relaxed text-ink-muted">
-              <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-brand" />
+              <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-none bg-brand" />
               {insight}
             </li>
           ))}

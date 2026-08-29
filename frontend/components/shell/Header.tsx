@@ -44,7 +44,7 @@ export function Header({ email, businessName }: HeaderProps) {
         {isProduction && (
           <span
             title="You are on the production deployment"
-            className="mr-2 hidden rounded-full border border-hairline bg-subtle px-2 py-0.5 font-mono text-[10px] tracking-[0.06em] text-ink-faint uppercase sm:inline-block"
+            className="mr-2 hidden rounded-none border border-hairline bg-subtle px-2 py-0.5 font-mono text-[10px] tracking-[0.06em] text-ink-faint uppercase sm:inline-block"
           >
             production
           </span>
@@ -52,7 +52,7 @@ export function Header({ email, businessName }: HeaderProps) {
         <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
           <Bell className="size-4" strokeWidth={1.75} aria-hidden />
           {NOTIFICATION_COUNT > 0 && (
-            <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-brand" aria-hidden />
+            <span className="absolute top-1.5 right-1.5 size-2 rounded-none bg-brand" aria-hidden />
           )}
         </Button>
         <ThemeToggle />

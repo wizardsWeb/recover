@@ -93,11 +93,11 @@ export function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-full border border-hairline bg-inset py-1.5 pr-1.5 pl-3.5 text-sm text-ink-faint transition-colors duration-150 hover:border-edge hover:text-ink-muted focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand/25 focus-visible:outline-none"
+        className="flex w-full items-center gap-2 rounded-none border border-hairline bg-inset py-1.5 pr-1.5 pl-3.5 text-sm text-ink-faint transition-colors duration-150 hover:border-edge hover:text-ink-muted focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand/25 focus-visible:outline-none"
       >
         <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
         <span className="flex-1 text-left">Search cases, customers, IDs…</span>
-        <kbd className="rounded-full border border-hairline bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink-faint">
+        <kbd className="rounded-none border border-hairline bg-elevated px-2 py-0.5 font-mono text-[10px] text-ink-faint">
           ⌘K
         </kbd>
       </button>
@@ -123,7 +123,7 @@ export function CommandPalette() {
                   onSelect={() => run(() => router.push(`/app/cases/${row.id}`))}
                 >
                   <span className="flex-1 truncate">{row.customers?.name ?? "Unknown"}</span>
-                  <span className="ml-2 shrink-0 rounded-4xl bg-subtle px-2 py-0.5 text-[10px] text-ink-muted">
+                  <span className="ml-2 shrink-0 rounded-none bg-subtle px-2 py-0.5 text-[10px] text-ink-muted">
                     {row.status.replace(/_/g, " ")}
                   </span>
                   <span className="ml-2 shrink-0 font-mono text-xs text-ink-faint">

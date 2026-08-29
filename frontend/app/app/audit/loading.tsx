@@ -17,13 +17,13 @@ export default function AuditLoading() {
         <Skeleton className="h-4 w-80" />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-card border border-hairline bg-elevated">
+      <div className="mt-6 overflow-hidden rounded-none border border-hairline bg-elevated">
         <div className="divide-y divide-hairline">
           {ROWS.map((row) => (
             <div key={row} className="flex items-center gap-3 px-4 py-3">
               <Skeleton className="size-3 shrink-0 rounded" />
               <Skeleton className="h-3 w-24 shrink-0" />
-              <Skeleton className="h-5 w-16 shrink-0 rounded-4xl" />
+              <Skeleton className="h-5 w-16 shrink-0 rounded-none" />
               <Skeleton className="h-4 w-full max-w-[280px]" />
             </div>
           ))}

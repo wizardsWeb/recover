@@ -181,13 +181,13 @@ function rootCauseLabel(cause: string): string {
 function ProvenanceBadge({ isStub }: { isStub: boolean }) {
   if (isStub) {
     return (
-      <span className="rounded-4xl bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
+      <span className="rounded-none bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
         Stub
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand">
+    <span className="inline-flex items-center gap-1 rounded-none bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand">
       <Sparkles size={9} />
       AI-diagnosed
     </span>
@@ -232,7 +232,7 @@ function DecideBadge({
     <span className="flex min-w-0 items-center gap-1.5">
       {isBandit ? (
         <span
-          className={`rounded-4xl px-2 py-0.5 text-[10px] font-medium ${
+          className={`rounded-none px-2 py-0.5 text-[10px] font-medium ${
             decision.bandit_mode === "explore"
               ? "bg-info-subtle text-info"
               : "bg-brand-subtle text-brand"
@@ -241,7 +241,7 @@ function DecideBadge({
           {decision.bandit_mode === "explore" ? "Explore" : "Exploit"}
         </span>
       ) : (
-        <span className="rounded-4xl bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
+        <span className="rounded-none bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning">
           Rule fallback
         </span>
       )}
@@ -264,14 +264,14 @@ function ConfidenceBar({ probability }: { probability: number }) {
         <span className="font-mono text-ink-muted">{pct}%</span>
       </div>
       <div
-        className="h-1 w-full overflow-hidden rounded-4xl bg-subtle"
+        className="h-1 w-full overflow-hidden rounded-none bg-subtle"
         role="meter"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label="Diagnosis confidence"
       >
-        <div className="h-full rounded-4xl bg-brand" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded-none bg-brand" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -295,7 +295,7 @@ function DiagnoseDetail({ diagnosis }: { diagnosis: Record<string, unknown> }) {
           it would mean none of them. Amber is a caution and lives on
           --warning; this is saffron-bronze and lives here. */}
       <div>
-        <p className="inline-flex items-center gap-2 rounded-4xl border border-gold bg-gold-light px-3 py-1 text-sm font-medium text-gold">
+        <p className="inline-flex items-center gap-2 rounded-none border border-gold bg-gold-light px-3 py-1 text-sm font-medium text-gold">
           <GitBranch size={13} aria-hidden />
           {rootCauseLabel(rootCause)}
         </p>
@@ -337,7 +337,7 @@ function DiagnoseDetail({ diagnosis }: { diagnosis: Record<string, unknown> }) {
 
 function MetaBadge({ label }: { label: string }) {
   return (
-    <span className="rounded-4xl bg-subtle px-2 py-0.5 text-[10px] text-ink-muted">{label}</span>
+    <span className="rounded-none bg-subtle px-2 py-0.5 text-[10px] text-ink-muted">{label}</span>
   );
 }
 
@@ -384,7 +384,7 @@ function TypingBubble({ children }: { children: ReactNode }) {
           {[0, 1, 2].map((dot) => (
             <motion.span
               key={dot}
-              className="size-1.5 rounded-full bg-whatsapp-ink/40"
+              className="size-1.5 rounded-none bg-whatsapp-ink/40"
               animate={{ y: [0, -4, 0] }}
               transition={{ duration: 0.6, repeat: Infinity, delay: dot * 0.15 }}
             />
@@ -582,7 +582,7 @@ function ListenDetail({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand">
+        <span className="rounded-none bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand">
           {INTENT_LABELS[intent] ?? humanise(intent)}
         </span>
         <span className="font-mono text-[10px] text-ink-faint">{intent}</span>
@@ -692,11 +692,11 @@ export function CaseTimeline({ caseDetail }: { caseDetail: CaseDetail }) {
                 line, which is the whole distinction the timeline is drawing. */}
             <div className="flex flex-col items-center">
               <div
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full ${RAIL_STYLES[status]}`}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-none ${RAIL_STYLES[status]}`}
               >
                 {STEP_ICONS[stepName]}
               </div>
-              {!isLast ? <div className="my-1 w-0.5 flex-1 rounded-full bg-hairline" /> : null}
+              {!isLast ? <div className="my-1 w-0.5 flex-1 rounded-none bg-hairline" /> : null}
             </div>
 
             <div className="flex-1 pb-2">

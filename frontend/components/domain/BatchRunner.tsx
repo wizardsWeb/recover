@@ -57,14 +57,14 @@ function ProgressPanel({ run }: { run: BatchRun }) {
     // second colour scheme to keep in agreement. In dark mode it simply reads as
     // continuous with the page, which is correct: the panel is not trying to be
     // dark, it is trying to be *the thing currently happening*.
-    <section className="dark space-y-4 rounded-card border border-hairline bg-base p-5 text-ink">
+    <section className="dark space-y-4 rounded-none border border-hairline bg-base p-5 text-ink">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-[-0.01em] text-ink">
           {/* A pulsing dot rather than a spinner. A spinner says "waiting"; a
               live indicator says "this is moving", which is the true statement
               — the numbers underneath are changing while it is on screen. */}
           <span aria-hidden className="flex size-2 shrink-0">
-            <span className="size-2 animate-pulse rounded-full bg-success" />
+            <span className="size-2 animate-pulse rounded-none bg-success" />
           </span>
           Running {total.toLocaleString("en-IN")} cases
         </h2>
@@ -80,7 +80,7 @@ function ProgressPanel({ run }: { run: BatchRun }) {
         aria-label="Batch simulation progress"
       >
         <ProgressTrack className="h-1.5 bg-subtle">
-          <ProgressIndicator className="rounded-full bg-brand" />
+          <ProgressIndicator className="rounded-none bg-brand" />
         </ProgressTrack>
       </Progress>
 
@@ -157,7 +157,7 @@ export function BatchRunner({ initial }: { initial: BatchRun | null }) {
   return (
     <div className="space-y-6">
       {failed ? (
-        <Alert variant="destructive" className="rounded-card border-danger/30 bg-danger-subtle">
+        <Alert variant="destructive" className="rounded-none border-danger/30 bg-danger-subtle">
           <TriangleAlert aria-hidden />
           <AlertTitle>The batch run failed</AlertTitle>
           <AlertDescription className="text-xs text-current opacity-90">
@@ -170,7 +170,7 @@ export function BatchRunner({ initial }: { initial: BatchRun | null }) {
 
       {completed ? (
         <>
-          <section className="space-y-4 rounded-card border border-hairline bg-elevated p-5 shadow-card">
+          <section className="space-y-4 rounded-none border border-hairline bg-elevated p-5 shadow-card">
             <div>
               <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
                 Bandit vs rule-based baseline —{" "}

@@ -84,9 +84,9 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
                   mounted flag: `initial` gives it the zero-width start state
                   without a render pass whose only job is to be replaced one
                   frame later. */}
-              <div className="h-2 flex-1 overflow-hidden rounded-4xl bg-inset">
+              <div className="h-2 flex-1 overflow-hidden rounded-none bg-inset">
                 <motion.div
-                  className={`h-full min-w-[2px] rounded-4xl ${
+                  className={`h-full min-w-[2px] rounded-none ${
                     alt.chosen ? "bg-brand" : alt.is_cold ? "bg-hairline" : "bg-ink-faint/40"
                   }`}
                   initial={{ width: prefersReducedMotion ? `${pct}%` : 0 }}
@@ -120,7 +120,7 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
               render={
                 <span
                   tabIndex={0}
-                  className="rounded-4xl bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
+                  className="rounded-none bg-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted"
                 />
               }
             >
@@ -138,7 +138,7 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
               render={
                 <span
                   tabIndex={0}
-                  className="rounded-4xl bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
+                  className="rounded-none bg-info-subtle px-2 py-0.5 text-[10px] font-medium text-info"
                 />
               }
             >
@@ -154,7 +154,7 @@ export function BanditAlternativesFan({ alternatives, banditMode, contextBucket 
               render={
                 <span
                   tabIndex={0}
-                  className="rounded-4xl bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
+                  className="rounded-none bg-brand-subtle px-2 py-0.5 text-[10px] font-medium text-brand"
                 />
               }
             >
