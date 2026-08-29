@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ProfileForm } from "@/components/settings/ProfileForm";
+import { TestModePanel } from "@/components/settings/TestModePanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isProduction } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -31,6 +33,10 @@ export default async function SettingsPage() {
       <Tabs defaultValue="profile">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          {/* Hidden on production, where test cards would be an invitation to
+              try them against live keys. Everywhere else it is the tab a judge
+              or a tester opens first. */}
+          {!isProduction ? <TabsTrigger value="test-mode">Test mode</TabsTrigger> : null}
           {/* Rendered disabled rather than hidden so the shape of what is
               coming is visible from the first session. */}
           <TabsTrigger value="playbooks" disabled>
@@ -51,6 +57,12 @@ export default async function SettingsPage() {
             initialTimezone={merchant.timezone}
           />
         </TabsContent>
+
+        {!isProduction ? (
+          <TabsContent value="test-mode" className="pt-6">
+            <TestModePanel />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </>
   );

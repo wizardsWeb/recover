@@ -20,6 +20,7 @@ from app.api import (
     cases,
     events,
     health,
+    integrations,
     merchants,
     ml,
     network,
@@ -168,6 +169,7 @@ app.include_router(audit.router)
 app.include_router(analytics.router)
 app.include_router(ml.router)
 app.include_router(network.router)
+app.include_router(integrations.router)
 # The simulator router refuses to serve outside a development environment;
 # see the dependency on `require_dev_environment`.
 app.include_router(simulator.router)
