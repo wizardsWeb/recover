@@ -222,7 +222,12 @@ class ExecutionResult(BaseModel):
     idempotency_key: str
     request_payload: dict[str, Any]
     response_payload: dict[str, Any]
-    simulated: bool = True  # False once real adapters wired (future phase)
+    #: Whether this attempt reached a real provider. Derived from the adapter's
+    #: own response, and it defaults to ``True`` on a missing flag because the
+    #: safe direction is under-claiming — an adapter that forgets to say gets
+    #: reported as simulated rather than borrowing the credibility of the real
+    #: Razorpay calls beside it.
+    simulated: bool = True
 
 
 class ReplyIntent(StrEnum):

@@ -43,6 +43,12 @@ from app.agent.prompts.message_prompt import (
     MESSAGE_SCHEMA,
     build_message_prompt,
 )
+from app.integrations.razorpay_client import (
+    create_payment_link,
+    get_razorpay_client,
+    retry_subscription_charge,
+    simulated_payment_link,
+)
 from app.logging import get_logger
 
 logger = get_logger(__name__)
@@ -156,9 +162,10 @@ async def run_execute(
             case, decision, supabase_client, trace_id, idempotency_key, customer, merchant
         )
 
-    adapter, result = await _dispatch(action_type, case, decision, trace_id)
+    adapter, result = await _dispatch(action_type, case, decision, trace_id, get_razorpay_client())
     if message is not None:
         _attach_message(result, message)
+        _substitute_payment_link(result)
 
     _write_attempt(
         supabase_client,
@@ -177,8 +184,114 @@ async def run_execute(
         idempotency_key=idempotency_key,
         request_payload=result["request_payload"],
         response_payload=result["response_payload"],
-        simulated=True,
+        simulated=_was_simulated(result),
     )
+
+
+async def _payment_link_adapter(
+    case: dict[str, Any],
+    rzp: Any,
+    *,
+    channel: str,
+    description: str,
+) -> tuple[str, dict[str, Any]]:
+    """Mint a payment link, really if possible and plausibly if not.
+
+    Shared by ``send_payment_link`` and ``mandate_reregister`` because they are
+    the same call with a different description — the difference between "pay this"
+    and "update your card" is what the link says, not which API it comes from.
+
+    ``reference_id`` is the case id. That is the join the ``payment.captured``
+    webhook uses to find this case when the customer pays, so it is the single
+    field that closes the loop, and it is why the amount and the case are read
+    from the same row rather than passed separately.
+    """
+    amount_cents = int(case.get("amount_at_risk_cents") or 0)
+    request = {
+        "amount": amount_cents,
+        "currency": "INR",
+        "description": description,
+        "customer": {"name": case.get("customer_name", "Customer")},
+        "channel": channel,
+        "reference_id": case["id"],
+    }
+
+    if rzp is None or amount_cents <= 0:
+        # A zero-amount link is one Razorpay would reject, and a case whose
+        # amount never parsed is exactly the case that produces one.
+        return "razorpay_payment_links_simulated", {
+            "request_payload": request,
+            "response_payload": {**simulated_payment_link(), "status": "created"},
+            "status": "success",
+        }
+
+    link = await create_payment_link(
+        rzp,
+        amount_cents=amount_cents,
+        customer_name=str(case.get("customer_name") or "Customer"),
+        customer_phone=case.get("customer_phone"),
+        customer_email=case.get("customer_email"),
+        description=description,
+        reference_id=str(case["id"]),
+        notes={"case_id": str(case["id"]), "playbook": str(case.get("playbook") or "")},
+    )
+    simulated = bool(link.get("simulated", True))
+    adapter = "razorpay_payment_links_simulated" if simulated else "razorpay_payment_links"
+    return adapter, {
+        "request_payload": request,
+        "response_payload": {
+            "id": link.get("id", ""),
+            "short_url": link.get("short_url", ""),
+            "payment_link_url": link.get("short_url", ""),
+            "status": link.get("status", "created"),
+            "simulated": simulated,
+        },
+        "status": "success",
+    }
+
+
+#: The literal the message prompt is given in place of a URL. The real link does
+#: not exist yet when the copy is written — see `_generate_message` — so the model
+#: is told to write this and the adapter swaps it afterwards.
+PAYMENT_LINK_PLACEHOLDER = "[payment link]"
+
+
+def _substitute_payment_link(result: dict[str, Any]) -> None:
+    """Put the minted URL into the copy that was written before it existed.
+
+    The ordering is deliberate and explained in ``_generate_message``: asking a
+    model to write a URL it has not been given is the fastest way to get a
+    hallucinated one in front of a customer. So the copy is written with a
+    placeholder and the real ``short_url`` replaces it here, once the adapter has
+    actually got one.
+
+    If no link was minted — a WhatsApp-only arm, say — the placeholder is
+    removed rather than left in. A customer reading "pay here: [payment link]"
+    is worse than one reading a message that simply does not offer a link.
+    """
+    body = result["request_payload"].get("body")
+    if not isinstance(body, str) or PAYMENT_LINK_PLACEHOLDER not in body:
+        return
+
+    short_url = str(result["response_payload"].get("short_url") or "")
+    if short_url:
+        result["request_payload"]["body"] = body.replace(PAYMENT_LINK_PLACEHOLDER, short_url)
+        result["response_payload"]["payment_link_url"] = short_url
+        return
+
+    cleaned = body.replace(PAYMENT_LINK_PLACEHOLDER, "").replace("  ", " ").strip()
+    result["request_payload"]["body"] = cleaned
+    logger.info("payment_link_placeholder_dropped", reason="no_link_minted")
+
+
+def _was_simulated(result: dict[str, Any]) -> bool:
+    """Whether this attempt reached a real provider.
+
+    Defaults to ``True`` on a missing flag, which is the safe direction: an
+    adapter that forgets to say gets reported as simulated, and the failure mode
+    is under-claiming rather than presenting a simulated send as a real one.
+    """
+    return bool(result["response_payload"].get("simulated", True))
 
 
 def _ltv_bucket(ltv_cents: Any) -> str:
@@ -270,7 +383,7 @@ async def _generate_message(
         tenure_days=int(customer.get("tenure_days") or 0),
         discount_pct=float(action_params.get("discount_pct") or 0),
         channel=str(action_params.get("channel") or "whatsapp"),
-        payment_link_url="[payment link]",
+        payment_link_url=PAYMENT_LINK_PLACEHOLDER,
         cart_items=_order_context(case, customer),
         invoice=_invoice_context(case),
     )
@@ -395,6 +508,9 @@ async def _run_graduated_sequence(
     days = days_overdue(case)
     arms = graduated_arms_for(days)
     log = logger.bind(case_id=case.get("id"), days_overdue=days)
+    # One client for the whole ladder rather than one per rung: constructing it
+    # reads settings and builds a session, and the ladder can be four sends.
+    rzp = get_razorpay_client()
 
     sub_actions: list[dict[str, Any]] = []
     for arm_name in arms:
@@ -422,9 +538,10 @@ async def _run_graduated_sequence(
             else None
         )
 
-        adapter, result = await _dispatch(sub_type, case, sub_decision, trace_id)
+        adapter, result = await _dispatch(sub_type, case, sub_decision, trace_id, rzp)
         if message is not None:
             _attach_message(result, message)
+            _substitute_payment_link(result)
 
         _write_attempt(
             supabase_client,
@@ -464,53 +581,79 @@ async def _dispatch(
     case: dict[str, Any],
     decision: dict[str, Any],
     trace_id: str,
+    rzp: Any = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Route to the correct simulated adapter.
+    """Route to the correct adapter.
 
-    Returns ``(adapter_name, result)`` where the result carries the request we
-    would have sent and the response we pretend came back. Both are stored, so
-    the audit trail shows the shape of the real call even though no call was
-    made.
+    Returns ``(adapter_name, result)``. Both payloads are stored either way, so
+    the audit trail shows the shape of the call whether or not one was made.
+
+    ``rzp`` is a Razorpay client or ``None``. Three adapters use it — payment
+    links, subscription retries and mandate re-registration — and each falls back
+    to its simulated branch when it is absent. The messaging adapters have no
+    real branch yet: WhatsApp, SMS and email would need their own providers, and
+    the honest thing is that their ``simulated`` flag stays true rather than
+    borrowing credibility from the Razorpay integration next to them.
+
+    The adapter *name* records which happened: ``razorpay_payment_links`` for a
+    real call, ``razorpay_payment_links_simulated`` for the fallback. A single
+    name for both is how a demo ends up unable to say which of its sends were
+    real.
     """
     params = decision.get("action_params") or {}
     metadata = case.get("metadata") or {}
 
     if action_type == "retry_charge":
-        # FUTURE INTEGRATION: POST /v1/subscriptions/{id}/retry_charge (Razorpay Subscriptions API)
+        subscription_id = str(metadata.get("subscription_id") or "sub_unknown")
+        request = {
+            "subscription_id": subscription_id,
+            # The instrument this retry targets. Recorded because the
+            # network aggregator reads it: a retry outcome only says
+            # something about a bank if the row remembers which bank it
+            # went to, and joining back through the case would tie the
+            # cross-merchant read to per-merchant tables.
+            "bank": metadata.get("bank"),
+            "method": metadata.get("method"),
+            "idempotency_key": trace_id,
+        }
+
+        if rzp is not None:
+            # Razorpay has no "charge this failed subscription again now" call —
+            # a subscription retries on its own schedule — so this reads the
+            # pending state and records it. Claiming to have forced a retry
+            # would be the one line in the audit trail describing an API call
+            # nobody can make. The customer-facing recovery is the payment link
+            # the same decision mints.
+            response = await retry_subscription_charge(rzp, subscription_id)
+            simulated = bool(response.get("simulated", True))
+            adapter = "razorpay_subscriptions_simulated" if simulated else "razorpay_subscriptions"
+            return adapter, {
+                "request_payload": request,
+                "response_payload": {
+                    "subscription_state": response,
+                    "retry_scheduled": not simulated,
+                    "simulated": simulated,
+                },
+                "status": "success",
+            }
+
         return "razorpay_subscriptions_simulated", {
-            "request_payload": {
-                "subscription_id": metadata.get("subscription_id", "sub_unknown"),
-                # The instrument this retry targets. Recorded because the
-                # network aggregator reads it: a retry outcome only says
-                # something about a bank if the row remembers which bank it
-                # went to, and joining back through the case would tie the
-                # cross-merchant read to per-merchant tables.
-                "bank": metadata.get("bank"),
-                "method": metadata.get("method"),
-                "idempotency_key": trace_id,
+            "request_payload": request,
+            "response_payload": {
+                "status": "queued",
+                "retry_scheduled": True,
+                "simulated": True,
             },
-            "response_payload": {"status": "queued", "retry_scheduled": True},
             "status": "success",
         }
 
     if action_type == "send_payment_link":
-        # FUTURE INTEGRATION: POST /v1/payment_links (Razorpay Payment Links API)
-        link_id = f"plink_sim_{uuid.uuid4().hex[:8]}"
-        return "razorpay_payment_links_simulated", {
-            "request_payload": {
-                "amount": case.get("amount_at_risk_cents", 0),
-                "currency": "INR",
-                "description": f"Recovery — case {case['id'][:8]}",
-                "customer": {"name": case.get("customer_name", "Customer")},
-                "channel": params.get("channel", "whatsapp"),
-            },
-            "response_payload": {
-                "id": link_id,
-                "short_url": f"https://rzp.io/l/{link_id}",
-                "status": "created",
-            },
-            "status": "success",
-        }
+        return await _payment_link_adapter(
+            case,
+            rzp,
+            channel=str(params.get("channel", "whatsapp")),
+            description=f"Recovery — case {case['id'][:8]}",
+        )
 
     if action_type == "send_whatsapp":
         # FUTURE INTEGRATION: POST /v1/messages (WhatsApp Business API via Meta or Razorpay)
@@ -555,15 +698,23 @@ async def _dispatch(
         }
 
     if action_type == "mandate_reregister":
-        # FUTURE INTEGRATION: Razorpay Subscriptions — mandate re-registration flow
-        return "razorpay_mandate_simulated", {
-            "request_payload": {"mandate_id": metadata.get("mandate_id", "mand_unknown")},
-            "response_payload": {
-                "status": "reregistration_initiated",
-                "registration_link": "https://rzp.io/r/sim",
-            },
-            "status": "success",
-        }
+        # Re-registering a mandate is not an API call the merchant can make on a
+        # customer's behalf — the customer has to authorise the new instrument
+        # themselves. So this is a payment link whose description says what it is
+        # for, which is the actual mechanism, rather than a call to an endpoint
+        # that would reject it.
+        adapter, result = await _payment_link_adapter(
+            case,
+            rzp,
+            channel="whatsapp",
+            description="Update your payment method",
+        )
+        result["request_payload"]["mandate_id"] = metadata.get("mandate_id", "mand_unknown")
+        result["request_payload"]["purpose"] = "mandate_reregistration"
+        result["response_payload"]["registration_link"] = result["response_payload"].get(
+            "short_url", ""
+        )
+        return adapter, result
 
     if action_type == "human_handoff":
         return "human_handoff_system", {
