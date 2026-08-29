@@ -84,9 +84,51 @@ def duration(path: Path) -> float:
     return float(out.stdout.strip())
 
 
+#: The long-standing premade voices, by id.
+#:
+#: Here because an API key scoped to text-to-speech alone cannot read /voices —
+#: it comes back 401 "missing the permission voices_read" — and refusing to
+#: synthesise because we could not look up a name we already know would be a
+#: silly way to fail.
+PREMADE = {
+    # Verified reachable on a free-tier key. The older set — Rachel, Aria,
+    # Charlotte — now counts as "library" voices and returns 402
+    # paid_plan_required, so they are deliberately not listed here.
+    "brian": ("nPczCjzI2devNBz1zQrb", "Brian"),
+    "george": ("JBFqnCBsd6RMkjVDRZzb", "George"),
+    "daniel": ("onwK4e9ZLuTAKqWW03F9", "Daniel"),
+    "roger": ("CwhRBWXzGAHq8TQ4Fs17", "Roger"),
+    "sarah": ("EXAVITQu4vr4xnSDxMaL", "Sarah"),
+    "laura": ("FGY2WhTYpPnrIDTdsKH5", "Laura"),
+    "alice": ("Xb7hH8MSUJpSbSDYk0k2", "Alice"),
+    "matilda": ("XrExE9yKIg1WjnnlVkGX", "Matilda"),
+    "jessica": ("cgSgspJ2msm6clMCkdW9", "Jessica"),
+    "lily": ("pFZP5JQG7iQjIQuC4Bku", "Lily"),
+}
+
+
 def resolve_voice(name: str, key: str) -> tuple[str, str]:
-    """Accept a voice id or a voice name, and return (id, name)."""
-    voices = api("/voices", key)["voices"]
+    """Accept a voice id or a voice name, and return (id, name).
+
+    Tries the account's own voice list first, because that is the only way to
+    reach a cloned or custom voice. Falls back to the premade table when the key
+    is not allowed to read it.
+    """
+    try:
+        voices = api("/voices", key)["voices"]
+    except urllib.error.HTTPError as error:
+        if error.code not in (401, 403):
+            raise
+        if name.lower() in PREMADE:
+            return PREMADE[name.lower()]
+        if len(name) >= 20 and name.isalnum():
+            return name, name
+        raise SystemExit(
+            f"This key cannot list voices, and {name!r} is not one of the premade "
+            f"ones ({', '.join(sorted(PREMADE))}).\n"
+            "Pass a voice id directly, or use a key with the voices_read scope."
+        ) from error
+
     for voice in voices:
         if voice["voice_id"] == name:
             return voice["voice_id"], voice["name"]
@@ -143,7 +185,7 @@ def assemble(segments: list[dict], clips: dict[str, Path], out: Path) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--voice", default="Rachel", help="voice name or voice_id")
+    parser.add_argument("--voice", default="Brian", help="voice name or voice_id")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--list-voices", action="store_true")
     parser.add_argument("--force", action="store_true", help="regenerate cached clips")

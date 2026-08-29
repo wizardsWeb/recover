@@ -128,7 +128,9 @@
       "title": "Meera, promise to pay",
       "start": 387.2,
       "window": 33.3,
-      "text": "Third business, a different problem. Sharma Distributors, business to business, one lakh forty five thousand rupees overdue. No discount codes here. That would be insulting, and it wouldn't work. A graduated sequence instead: polite first, firmer second. Then Meera replied: fifty per cent abhi kar deti hoon, baaki twenty five tak. Gemini read it as a promise to pay. Half now, the rest by the twenty fifth. So the agent stood down and paused until that date. It isn't chasing her, because she already answered."
+      "text": "Sharma Distributors, business to business. One lakh forty five thousand rupees overdue. A graduated sequence, not discounts. Then Meera replied: fifty per cent abhi kar deti hoon, baaki twenty five tak. A promise to pay, so the agent paused.",
+      "text_full": "Third business, a different problem. Sharma Distributors, business to business, one lakh forty five thousand rupees overdue. No discount codes here. That would be insulting, and it wouldn't work. A graduated sequence instead: polite first, firmer second. Then Meera replied: fifty per cent abhi kar deti hoon, baaki twenty five tak. Gemini read it as a promise to pay. Half now, the rest by the twenty fifth. So the agent stood down and paused until that date. It isn't chasing her, because she already answered.",
+      "_note": "Trimmed to fit the remaining free-tier credits. Restore text_full into text and re-run with credits available \u2014 only this segment re-bills."
     },
     {
       "id": "S19",
